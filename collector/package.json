@@ -1,0 +1,18 @@
+{
+  "name": "print-manager-collector",
+  "version": "1.0.0",
+  "description": "Coletor local Windows — fila de impressão e envio à API",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js",
+    "install-service": "node scripts/install-service.js"
+  },
+  "dependencies": {
+    "axios": "^1.7.7",
+    "node-windows": "^1.0.0-beta.8"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

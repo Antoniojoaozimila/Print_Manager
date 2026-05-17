@@ -1,0 +1,48 @@
+{
+  "name": "print-manager-api",
+  "version": "1.0.0",
+  "description": "API do Sistema de Gestão de Impressões",
+  "main": "src/server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js",
+    "test": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --coverage --detectOpenHandles --forceExit",
+    "db:patch:consumiveis": "node scripts/apply-consumiveis-anexos-registado-por.js",
+    "db:migrate": "sequelize-cli db:migrate",
+    "db:migrate:undo": "sequelize-cli db:migrate:undo",
+    "db:seed": "sequelize-cli db:seed:all",
+    "admin:create": "node scripts/create-admin.js",
+    "gestao:apply": "node scripts/apply-modulo-consumiveis-papercut.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "csv-parse": "^6.2.1",
+    "docx": "^8.5.0",
+    "dotenv": "^16.4.5",
+    "exceljs": "^4.4.0",
+    "express": "^4.21.1",
+    "express-rate-limit": "^7.4.1",
+    "helmet": "^8.0.0",
+    "joi": "^17.13.3",
+    "jsonwebtoken": "^9.0.2",
+    "multer": "^2.1.1",
+    "mysql2": "^3.22.3",
+    "node-cron": "^3.0.3",
+    "pdfkit": "^0.15.0",
+    "sequelize": "^6.37.5",
+    "socket.io": "^4.8.1",
+    "uuid": "^11.0.3",
+    "winston": "^3.17.0"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "nodemon": "^3.1.7",
+    "sequelize-cli": "^6.6.2",
+    "supertest": "^7.0.0"
+  }
+}

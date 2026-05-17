@@ -1,0 +1,7 @@
+{
+  "apiBaseUrl": "http://localhost:4000/api",
+  "collectorToken": "a5d726b3e517474a9c91f2910f95d3ef684daccc",
+  "pollIntervalMs": 8000,
+  "printerSyncIntervalMs": 120000,
+  "queueDir": "./offline-queue"
+}
