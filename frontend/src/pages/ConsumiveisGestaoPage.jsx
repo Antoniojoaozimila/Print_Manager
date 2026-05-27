@@ -1,19 +1,14 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { useForm } from 'react-hook-form';
 import api from '../lib/api';
 import { useAuthStore } from '../store/authStore';
 import Modal from '../components/ui/Modal';
 import PageHeader from '../components/ui/PageHeader';
+import ConsumivelTipoSelect, { labelTipo } from '../components/consumiveis/ConsumivelTipoSelect';
+import ConsumivelLoteForm from '../components/consumiveis/ConsumivelLoteForm';
 
 const labelClass = 'label-imperial';
 const inputClass = 'input-imperial';
-
-const TIPO_LABEL = {
-  papel_a4: 'Papel A4',
-  envelope: 'Envelope',
-  toner: 'Toner',
-  agrafos: 'Agrafos',
-};
 
 const DOC_TIPOS = [
   { key: 'cotacao', label: 'Cotações' },
@@ -46,34 +41,36 @@ function anexosPorTipo(anexos = []) {
   return g;
 }
 
-const anexosVazios = () =>
-  Object.fromEntries(DOC_TIPOS.map((d) => [d.key, []]));
+const anexosVazios = () => Object.fromEntries(DOC_TIPOS.map((d) => [d.key, []]));
 
 export default function ConsumiveisGestaoPage() {
   const role = useAuthStore((s) => s.user?.role);
   const isAdmin = role === 'admin';
 
-  const [catalogos, setCatalogos] = useState({ provincias: [], departamentos: [] });
+  const [catalogos, setCatalogos] = useState({ provincias: [], departamentos: [], tipos: [] });
   const [lista, setLista] = useState([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [filtros, setFiltros] = useState({ tipo: '', provinciaId: '', search: '' });
   const [msg, setMsg] = useState('');
   const [formAberto, setFormAberto] = useState(false);
+  const [modoRegisto, setModoRegisto] = useState('individual');
   const [editId, setEditId] = useState(null);
   const [detalheId, setDetalheId] = useState(null);
   const [anexosNovos, setAnexosNovos] = useState(anexosVazios);
   const [mapaDe, setMapaDe] = useState('');
   const [mapaAte, setMapaAte] = useState('');
+  const [aGuardarLote, setAGuardarLote] = useState(false);
+  const [tipoSeleccionado, setTipoSeleccionado] = useState('');
 
   const anexoInputsRef = useRef({});
 
   const { register, handleSubmit, reset, setValue } = useForm();
 
-  async function carregarCatalogos() {
+  const carregarCatalogos = useCallback(async () => {
     const { data } = await api.get('/consumiveis/catalogos');
     setCatalogos(data.data);
-  }
+  }, []);
 
   async function carregarLista() {
     const params = { page, limit: 15, ...filtros };
@@ -87,7 +84,7 @@ export default function ConsumiveisGestaoPage() {
 
   useEffect(() => {
     carregarCatalogos();
-  }, []);
+  }, [carregarCatalogos]);
 
   useEffect(() => {
     carregarLista();
@@ -96,13 +93,17 @@ export default function ConsumiveisGestaoPage() {
   function fecharFormulario() {
     setFormAberto(false);
     setEditId(null);
+    setModoRegisto('individual');
+    setTipoSeleccionado('');
     setAnexosNovos(anexosVazios());
     reset();
   }
 
-  function abrirNovo() {
+  function abrirNovo(modo = 'individual') {
     setEditId(null);
+    setModoRegisto(modo);
     setAnexosNovos(anexosVazios());
+    setTipoSeleccionado('');
     reset({
       provincia_id: '',
       departamento_id: '',
@@ -118,7 +119,9 @@ export default function ConsumiveisGestaoPage() {
 
   function abrirEdicao(r) {
     setEditId(r.id);
+    setModoRegisto('individual');
     setAnexosNovos(anexosVazios());
+    setTipoSeleccionado(r.tipo);
     setValue('provincia_id', r.provincia_id);
     setValue('departamento_id', r.departamento_id || '');
     setValue('tipo', r.tipo);
@@ -129,6 +132,13 @@ export default function ConsumiveisGestaoPage() {
     setValue('observacoes', r.observacoes || '');
     setFormAberto(true);
     setDetalheId(r.id);
+  }
+
+  function onTipoCriado(novoTipo) {
+    setCatalogos((prev) => ({
+      ...prev,
+      tipos: [...(prev.tipos || []), novoTipo].sort((a, b) => (a.ordem || 0) - (b.ordem || 0)),
+    }));
   }
 
   function onFicheirosTipo(tipoKey, fileList) {
@@ -167,9 +177,14 @@ export default function ConsumiveisGestaoPage() {
 
   async function onSubmit(values) {
     setMsg('');
+    if (!tipoSeleccionado) {
+      setMsg('Seleccione o tipo de consumível.');
+      return;
+    }
     try {
       const payload = {
         ...values,
+        tipo: tipoSeleccionado || values.tipo,
         quantidade: Number(values.quantidade),
         preco_unitario: Number(values.preco_unitario),
         data_termino: values.data_termino || null,
@@ -191,6 +206,25 @@ export default function ConsumiveisGestaoPage() {
       await carregarLista();
     } catch (e) {
       setMsg(e.response?.data?.error || 'Erro ao guardar.');
+    }
+  }
+
+  async function onSubmitLote(payload) {
+    setMsg('');
+    setAGuardarLote(true);
+    try {
+      const { data } = await api.post('/consumiveis/registos/lote', payload);
+      const ids = data.data.registos.map((r) => r.id);
+      for (const id of ids) {
+        await enviarAnexosPorTipo(id, anexosNovos);
+      }
+      fecharFormulario();
+      await carregarLista();
+      setMsg(`${data.data.num_registos} consumível(is) registados em lote.`);
+    } catch (e) {
+      setMsg(e.response?.data?.error || 'Erro ao registar lote.');
+    } finally {
+      setAGuardarLote(false);
     }
   }
 
@@ -277,19 +311,31 @@ export default function ConsumiveisGestaoPage() {
     }
   }
 
+  const tipos = catalogos.tipos || [];
   const registoDetalhe = detalheId ? lista.find((r) => r.id === detalheId) : null;
+
+  const tituloModal = editId
+    ? 'Editar consumível'
+    : modoRegisto === 'lote'
+      ? 'Registo em lote'
+      : 'Novo consumível';
 
   return (
     <div className="page-content max-w-5xl">
       <PageHeader
         badge="Gestão"
         title="Consumíveis de escritório"
-        subtitle="Registe compras por balcão, anexe documentos e exporte o mapa completo."
+        subtitle="Registe compras individuais ou em lote, anexe documentos e exporte o mapa completo."
         actions={
           isAdmin ? (
-            <button type="button" onClick={abrirNovo} className="btn-imperial">
-              + Novo consumível
-            </button>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" onClick={() => abrirNovo('individual')} className="btn-imperial">
+                + Novo consumível
+              </button>
+              <button type="button" onClick={() => abrirNovo('lote')} className="btn-imperial-outline">
+                + Compra em lote
+              </button>
+            </div>
           ) : null
         }
       />
@@ -320,113 +366,158 @@ export default function ConsumiveisGestaoPage() {
         </div>
       </section>
 
-      <Modal
-        open={formAberto && isAdmin}
-        onClose={fecharFormulario}
-        title={editId ? 'Editar consumível' : 'Novo consumível'}
-        wide
-      >
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          <p className="text-xs text-slate-500">
-            Papel A4: quantidade em <strong className="text-imperial-300">caixas</strong> (1 caixa = 5 resmas = 2 500
-            folhas). Estes preços alimentam os relatórios PaperCut.
-          </p>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            <div>
-              <label className={labelClass}>Província / distrito *</label>
-              <select className={inputClass} {...register('provincia_id', { required: true })}>
-                <option value="">Seleccione…</option>
-                {catalogos.provincias?.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.nome}
-                  </option>
+      <Modal open={formAberto && isAdmin} onClose={fecharFormulario} title={tituloModal} wide>
+        {modoRegisto === 'lote' && !editId ? (
+          <>
+            <ConsumivelLoteForm
+              catalogos={catalogos}
+              tipos={tipos}
+              onTipoCriado={onTipoCriado}
+              onSubmit={onSubmitLote}
+              onCancel={fecharFormulario}
+              aGuardar={aGuardarLote}
+            />
+            <div className="border-t border-surface-border pt-4 mt-4 space-y-3">
+              <p className="text-xs text-slate-400 font-medium uppercase tracking-wide">
+                Documentos da compra (opcional — aplicados a todos os itens)
+              </p>
+              <div className="grid sm:grid-cols-2 gap-3">
+                {DOC_TIPOS.map(({ key, label }) => (
+                  <div key={key} className="app-card-nested space-y-2">
+                    <p className="text-sm text-slate-300">{label}</p>
+                    <input
+                      type="file"
+                      multiple
+                      className="text-xs text-slate-400 w-full"
+                      onChange={(e) => onFicheirosTipo(key, e.target.files)}
+                    />
+                    {(anexosNovos[key] || []).map((f, i) => (
+                      <div key={`${key}-${i}`} className="flex justify-between text-xs text-slate-500">
+                        <span className="truncate">{f.name}</span>
+                        <button
+                          type="button"
+                          className="text-red-400 ml-2"
+                          onClick={() => removerFicheiroPendente(key, i)}
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
                 ))}
-              </select>
+              </div>
             </div>
-            <div>
-              <label className={labelClass}>Departamento</label>
-              <select className={inputClass} {...register('departamento_id')}>
-                <option value="">—</option>
-                {catalogos.departamentos?.map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {d.nome}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className={labelClass}>Tipo *</label>
-              <select className={inputClass} {...register('tipo', { required: true })}>
-                <option value="">Seleccione…</option>
-                <option value="papel_a4">Papel A4 (caixas)</option>
-                <option value="envelope">Envelope</option>
-                <option value="toner">Toner</option>
-                <option value="agrafos">Agrafos</option>
-              </select>
-            </div>
-            <div>
-              <label className={labelClass}>Quantidade *</label>
-              <input type="number" step="0.01" className={inputClass} {...register('quantidade', { required: true })} />
-            </div>
-            <div>
-              <label className={labelClass}>Preço unitário (MZN) *</label>
-              <input
-                type="number"
-                step="0.0001"
-                className={inputClass}
-                {...register('preco_unitario', { required: true })}
-              />
-            </div>
-            <div>
-              <label className={labelClass}>Data de aquisição *</label>
-              <input type="date" className={inputClass} {...register('data_aquisicao', { required: true })} />
-            </div>
-            <div>
-              <label className={labelClass}>Data de término</label>
-              <input type="date" className={inputClass} {...register('data_termino')} />
-            </div>
-            <div className="sm:col-span-2 lg:col-span-3">
-              <label className={labelClass}>Observações</label>
-              <textarea className={inputClass} rows={2} {...register('observacoes')} />
-            </div>
-          </div>
-
-          <div className="border-t border-surface-border pt-4 space-y-3">
-            <p className="text-xs text-slate-400 font-medium uppercase tracking-wide">
-              Documentos {editId ? '(adicionar novos)' : '(opcional no registo)'}
+          </>
+        ) : (
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+            <p className="text-xs text-slate-500">
+              Papel A4: quantidade em <strong className="text-imperial-300">caixas</strong> (1 caixa = 5 resmas = 2 500
+              folhas). Estes preços alimentam os relatórios PaperCut.
             </p>
-            <div className="grid sm:grid-cols-2 gap-3">
-              {DOC_TIPOS.map(({ key, label }) => (
-                <div key={key} className="app-card-nested space-y-2">
-                  <p className="text-sm text-slate-300">{label}</p>
-                  <input
-                    type="file"
-                    multiple
-                    className="text-xs text-slate-400 w-full"
-                    onChange={(e) => onFicheirosTipo(key, e.target.files)}
-                  />
-                  {(anexosNovos[key] || []).map((f, i) => (
-                    <div key={`${key}-${i}`} className="flex justify-between text-xs text-slate-500">
-                      <span className="truncate">{f.name}</span>
-                      <button type="button" className="text-red-400 ml-2" onClick={() => removerFicheiroPendente(key, i)}>
-                        ×
-                      </button>
-                    </div>
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div>
+                <label className={labelClass}>Província / distrito *</label>
+                <select className={inputClass} {...register('provincia_id', { required: true })}>
+                  <option value="">Seleccione…</option>
+                  {catalogos.provincias?.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.nome}
+                    </option>
                   ))}
-                </div>
-              ))}
+                </select>
+              </div>
+              <div>
+                <label className={labelClass}>Departamento / destino</label>
+                <select className={inputClass} {...register('departamento_id')}>
+                  <option value="">—</option>
+                  {catalogos.departamentos?.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.nome}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className={labelClass}>Tipo *</label>
+                <ConsumivelTipoSelect
+                  tipos={tipos}
+                  value={tipoSeleccionado}
+                  onChange={(v) => {
+                    setTipoSeleccionado(v);
+                    setValue('tipo', v);
+                  }}
+                  onTipoCriado={onTipoCriado}
+                  required
+                />
+              </div>
+              <div>
+                <label className={labelClass}>Quantidade *</label>
+                <input type="number" step="0.01" className={inputClass} {...register('quantidade', { required: true })} />
+              </div>
+              <div>
+                <label className={labelClass}>Preço unitário (MZN) *</label>
+                <input
+                  type="number"
+                  step="0.0001"
+                  className={inputClass}
+                  {...register('preco_unitario', { required: true })}
+                />
+              </div>
+              <div>
+                <label className={labelClass}>Data de aquisição *</label>
+                <input type="date" className={inputClass} {...register('data_aquisicao', { required: true })} />
+              </div>
+              <div>
+                <label className={labelClass}>Data de término</label>
+                <input type="date" className={inputClass} {...register('data_termino')} />
+              </div>
+              <div className="sm:col-span-2 lg:col-span-3">
+                <label className={labelClass}>Observações</label>
+                <textarea className={inputClass} rows={2} {...register('observacoes')} />
+              </div>
             </div>
-          </div>
 
-          <div className="flex flex-wrap gap-2 pt-2">
-            <button type="submit" className="btn-imperial">
-              {editId ? 'Guardar' : 'Registar'}
-            </button>
-            <button type="button" onClick={fecharFormulario} className="btn-imperial-outline">
-              Cancelar
-            </button>
-          </div>
-        </form>
+            <div className="border-t border-surface-border pt-4 space-y-3">
+              <p className="text-xs text-slate-400 font-medium uppercase tracking-wide">
+                Documentos {editId ? '(adicionar novos)' : '(opcional no registo)'}
+              </p>
+              <div className="grid sm:grid-cols-2 gap-3">
+                {DOC_TIPOS.map(({ key, label }) => (
+                  <div key={key} className="app-card-nested space-y-2">
+                    <p className="text-sm text-slate-300">{label}</p>
+                    <input
+                      type="file"
+                      multiple
+                      className="text-xs text-slate-400 w-full"
+                      onChange={(e) => onFicheirosTipo(key, e.target.files)}
+                    />
+                    {(anexosNovos[key] || []).map((f, i) => (
+                      <div key={`${key}-${i}`} className="flex justify-between text-xs text-slate-500">
+                        <span className="truncate">{f.name}</span>
+                        <button
+                          type="button"
+                          className="text-red-400 ml-2"
+                          onClick={() => removerFicheiroPendente(key, i)}
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-2 pt-2">
+              <button type="submit" className="btn-imperial">
+                {editId ? 'Guardar' : 'Registar'}
+              </button>
+              <button type="button" onClick={fecharFormulario} className="btn-imperial-outline">
+                Cancelar
+              </button>
+            </div>
+          </form>
+        )}
       </Modal>
 
       <div className="flex flex-wrap gap-3 items-end">
@@ -438,10 +529,11 @@ export default function ConsumiveisGestaoPage() {
             onChange={(e) => setFiltros((f) => ({ ...f, tipo: e.target.value }))}
           >
             <option value="">Todos</option>
-            <option value="papel_a4">Papel A4</option>
-            <option value="envelope">Envelope</option>
-            <option value="toner">Toner</option>
-            <option value="agrafos">Agrafos</option>
+            {tipos.map((t) => (
+              <option key={t.codigo} value={t.codigo}>
+                {t.nome}
+              </option>
+            ))}
           </select>
         </div>
         <div>
@@ -475,6 +567,7 @@ export default function ConsumiveisGestaoPage() {
           <thead>
             <tr>
               <th>Província</th>
+              <th>Destino</th>
               <th>Tipo</th>
               <th>Qtd</th>
               <th>Total MZN</th>
@@ -486,7 +579,7 @@ export default function ConsumiveisGestaoPage() {
           <tbody>
             {lista.length === 0 ? (
               <tr>
-                <td colSpan={7} className="py-8 text-center text-slate-500">
+                <td colSpan={8} className="py-8 text-center text-slate-500">
                   Nenhum consumível registado.
                 </td>
               </tr>
@@ -494,7 +587,8 @@ export default function ConsumiveisGestaoPage() {
               lista.map((r) => (
                 <tr key={r.id}>
                   <td>{r.provincia?.nome}</td>
-                  <td className="text-white">{TIPO_LABEL[r.tipo] || r.tipo}</td>
+                  <td className="text-slate-400 text-xs">{r.departamento?.nome || '—'}</td>
+                  <td className="text-white">{labelTipo(tipos, r.tipo)}</td>
                   <td className="font-mono">{r.quantidade}</td>
                   <td className="font-mono">{Number(r.preco_total).toFixed(2)}</td>
                   <td className="text-slate-400">{r.data_aquisicao}</td>
@@ -510,7 +604,11 @@ export default function ConsumiveisGestaoPage() {
                   <td className="text-right whitespace-nowrap space-x-2">
                     {isAdmin && (
                       <>
-                        <button type="button" className="text-xs text-slate-300 hover:text-white" onClick={() => abrirEdicao(r)}>
+                        <button
+                          type="button"
+                          className="text-xs text-slate-300 hover:text-white"
+                          onClick={() => abrirEdicao(r)}
+                        >
                           Editar
                         </button>
                         <button type="button" className="text-xs text-red-400" onClick={() => remover(r.id)}>
@@ -529,7 +627,12 @@ export default function ConsumiveisGestaoPage() {
       <div className="flex justify-between text-sm text-slate-500">
         <span>{total} registo(s)</span>
         <div className="space-x-2">
-          <button type="button" disabled={page <= 1} onClick={() => setPage((p) => p - 1)} className="text-link disabled:opacity-30">
+          <button
+            type="button"
+            disabled={page <= 1}
+            onClick={() => setPage((p) => p - 1)}
+            className="text-link disabled:opacity-30"
+          >
             Anterior
           </button>
           <button
@@ -547,7 +650,7 @@ export default function ConsumiveisGestaoPage() {
         <section className="app-card space-y-4">
           <div className="flex flex-wrap justify-between gap-2">
             <h2 className="text-white font-medium text-sm">
-              Documentos — {registoDetalhe.provincia?.nome} · {TIPO_LABEL[registoDetalhe.tipo]}
+              Documentos — {registoDetalhe.provincia?.nome} · {labelTipo(tipos, registoDetalhe.tipo)}
             </h2>
             <button type="button" className="text-xs text-slate-500" onClick={() => setDetalheId(null)}>
               Fechar
