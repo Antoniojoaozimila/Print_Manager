@@ -1,0 +1,56 @@
+-- MySQL dump 10.13  Distrib 8.0.45, for Win64 (x86_64)
+--
+-- Host: 127.0.0.1    Database: print_manager
+-- ------------------------------------------------------
+-- Server version	8.0.45
+
+/*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
+/*!40101 SET @OLD_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS */;
+/*!40101 SET @OLD_COLLATION_CONNECTION=@@COLLATION_CONNECTION */;
+/*!50503 SET NAMES utf8 */;
+/*!40103 SET @OLD_TIME_ZONE=@@TIME_ZONE */;
+/*!40103 SET TIME_ZONE='+00:00' */;
+/*!40014 SET @OLD_UNIQUE_CHECKS=@@UNIQUE_CHECKS, UNIQUE_CHECKS=0 */;
+/*!40014 SET @OLD_FOREIGN_KEY_CHECKS=@@FOREIGN_KEY_CHECKS, FOREIGN_KEY_CHECKS=0 */;
+/*!40101 SET @OLD_SQL_MODE=@@SQL_MODE, SQL_MODE='NO_AUTO_VALUE_ON_ZERO' */;
+/*!40111 SET @OLD_SQL_NOTES=@@SQL_NOTES, SQL_NOTES=0 */;
+
+--
+-- Table structure for table `provincias`
+--
+
+DROP TABLE IF EXISTS `provincias`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `provincias` (
+  `id` char(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT (uuid()),
+  `nome` varchar(120) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `ordem` int NOT NULL DEFAULT '0',
+  `ativo` tinyint(1) NOT NULL DEFAULT '1',
+  `created_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `updated_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `provincias_nome_uq` (`nome`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `provincias`
+--
+
+LOCK TABLES `provincias` WRITE;
+/*!40000 ALTER TABLE `provincias` DISABLE KEYS */;
+INSERT INTO `provincias` VALUES ('b1a0dac1-4fb3-11f1-955a-a4bb6d171c32','Maputo',1,1,'2026-05-14 18:41:02.206','2026-05-14 18:41:02.206'),('b1a105d7-4fb3-11f1-955a-a4bb6d171c32','Matola',2,1,'2026-05-14 18:41:02.206','2026-05-14 18:41:02.206'),('b1a12b72-4fb3-11f1-955a-a4bb6d171c32','Xai-Xai',3,1,'2026-05-14 18:41:02.206','2026-05-14 18:41:02.206'),('b1a13083-4fb3-11f1-955a-a4bb6d171c32','Chókwè',4,1,'2026-05-14 18:41:02.206','2026-05-14 18:41:02.206'),('b1a133db-4fb3-11f1-955a-a4bb6d171c32','Maxixe',5,1,'2026-05-14 18:41:02.206','2026-05-14 18:41:02.206'),('b1a13d4a-4fb3-11f1-955a-a4bb6d171c32','Beira',6,1,'2026-05-14 18:41:02.206','2026-05-14 18:41:02.206'),('b1a14059-4fb3-11f1-955a-a4bb6d171c32','Chimoio',7,1,'2026-05-14 18:41:02.206','2026-05-14 18:41:02.206'),('b1a14309-4fb3-11f1-955a-a4bb6d171c32','Quelimane',8,1,'2026-05-14 18:41:02.206','2026-05-14 18:41:02.206'),('b1a145bf-4fb3-11f1-955a-a4bb6d171c32','Lichinga',9,1,'2026-05-14 18:41:02.206','2026-05-14 18:41:02.206'),('b1a148bc-4fb3-11f1-955a-a4bb6d171c32','Nacala',10,1,'2026-05-14 18:41:02.206','2026-05-14 18:41:02.206'),('b1a14c40-4fb3-11f1-955a-a4bb6d171c32','Nampula',11,1,'2026-05-14 18:41:02.206','2026-05-14 18:41:02.206'),('b1a14f2f-4fb3-11f1-955a-a4bb6d171c32','Pemba',12,1,'2026-05-14 18:41:02.206','2026-05-14 18:41:02.206');
+/*!40000 ALTER TABLE `provincias` ENABLE KEYS */;
+UNLOCK TABLES;
+/*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
+
+/*!40101 SET SQL_MODE=@OLD_SQL_MODE */;
+/*!40014 SET FOREIGN_KEY_CHECKS=@OLD_FOREIGN_KEY_CHECKS */;
+/*!40014 SET UNIQUE_CHECKS=@OLD_UNIQUE_CHECKS */;
+/*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
+/*!40101 SET CHARACTER_SET_RESULTS=@OLD_CHARACTER_SET_RESULTS */;
+/*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
+/*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
+
+-- Dump completed on 2026-05-27  2:35:46
