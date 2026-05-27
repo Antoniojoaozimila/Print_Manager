@@ -15,6 +15,7 @@ SELECT v.nome, v.ordem, 1 FROM (
   UNION ALL SELECT 'Risco e Conformidade', 3 UNION ALL SELECT 'Comercial', 4
   UNION ALL SELECT 'Jurídico', 5 UNION ALL SELECT 'Sinistros', 6
   UNION ALL SELECT 'Contabilidade', 7 UNION ALL SELECT 'Credit Control', 8
-  UNION ALL SELECT 'Informática', 9
+  UNION ALL SELECT 'Informática', 9 UNION ALL SELECT 'Sede', 10
+  UNION ALL SELECT 'Comercial Maputo', 11
 ) v
 WHERE NOT EXISTS (SELECT 1 FROM departamentos_gestao d WHERE d.nome = v.nome);

@@ -1,5 +1,6 @@
 import models from '../../models/index.js';
 import { Op } from 'sequelize';
+import { v4 as uuidv4 } from 'uuid';
 
 export const consumiveisRepository = {
   async findRegistos({ where, limit, offset, order }) {
@@ -106,6 +107,39 @@ export const consumiveisRepository = {
 
   async createRegisto(data) {
     return models.ConsumivelRegisto.create(data);
+  },
+
+  async createRegistosBulk(registos, transaction) {
+    return models.ConsumivelRegisto.bulkCreate(registos, { transaction });
+  },
+
+  async listTipos() {
+    return models.ConsumivelTipo.findAll({
+      where: { ativo: true },
+      order: [
+        ['ordem', 'ASC'],
+        ['nome', 'ASC'],
+      ],
+    });
+  },
+
+  async findTipoByCodigo(codigo) {
+    return models.ConsumivelTipo.findOne({ where: { codigo, ativo: true } });
+  },
+
+  async createTipo(data) {
+    return models.ConsumivelTipo.create(data);
+  },
+
+  async findTiposByCodigos(codigos) {
+    if (!codigos?.length) return [];
+    return models.ConsumivelTipo.findAll({
+      where: { codigo: { [Op.in]: codigos }, ativo: true },
+    });
+  },
+
+  novoCompraLoteId() {
+    return uuidv4();
   },
 
   async updateRegisto(id, data) {

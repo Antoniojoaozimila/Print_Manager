@@ -9,6 +9,7 @@
     "dev": "nodemon src/server.js",
     "test": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --coverage --detectOpenHandles --forceExit",
     "db:patch:consumiveis": "node scripts/apply-consumiveis-anexos-registado-por.js",
+    "db:patch:consumiveis-tipos-lote": "node scripts/apply-consumiveis-tipos-lote.js",
     "db:migrate": "sequelize-cli db:migrate",
     "db:migrate:undo": "sequelize-cli db:migrate:undo",
     "db:seed": "sequelize-cli db:seed:all",

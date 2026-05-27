@@ -12,8 +12,14 @@ export default (sequelize) =>
         comment: 'Legado; consumíveis são por província. Departamento só PaperCut/relatórios.',
       },
       tipo: {
-        type: DataTypes.ENUM('papel_a4', 'envelope', 'toner', 'agrafos'),
+        type: DataTypes.STRING(64),
         allowNull: false,
+        comment: 'Código do tipo (consumiveis_tipos.codigo ou legado)',
+      },
+      compra_lote_id: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        comment: 'Agrupa itens registados na mesma compra em lote',
       },
       quantidade: { type: DataTypes.DECIMAL(14, 4), allowNull: false },
       preco_unitario: { type: DataTypes.DECIMAL(16, 6), allowNull: false },

@@ -5,6 +5,9 @@ import {
   FOLHAS_POR_CAIXA_A4,
   FOLHAS_POR_RESMA_A4,
   RESMAS_POR_CAIXA_A4,
+  TIPOS_CONSUMIVEL,
+  TIPOS_CONSUMIVEL_LABEL,
+  slugifyTipoCodigo,
   estimativaTonerRelativa,
 } from './consumiveis.constants.js';
 
@@ -15,6 +18,103 @@ function num(v) {
 
 export function calcularPrecoTotal(quantidade, precoUnitario) {
   return Math.round(num(quantidade) * num(precoUnitario) * 10000) / 10000;
+}
+
+export async function obterMapaTiposConsumivel() {
+  const tipos = await consumiveisRepository.listTipos();
+  const map = { ...TIPOS_CONSUMIVEL_LABEL };
+  for (const t of tipos) {
+    map[t.codigo] = t.unidade ? `${t.nome} (${t.unidade})` : t.nome;
+  }
+  return map;
+}
+
+export async function validarTipoConsumivel(codigo) {
+  const tipo = await consumiveisRepository.findTipoByCodigo(codigo);
+  if (!tipo) {
+    const err = new Error(`Tipo de consumível inválido: ${codigo}`);
+    err.status = 400;
+    throw err;
+  }
+  return tipo;
+}
+
+export async function criarTipoConsumivel({ nome, unidade, codigo }) {
+  let slug = codigo?.trim() || slugifyTipoCodigo(nome);
+  if (!/^[a-z][a-z0-9_]{0,63}$/.test(slug)) {
+    const err = new Error('Código inválido. Use letras minúsculas, números e underscore.');
+    err.status = 400;
+    throw err;
+  }
+  const existente = await consumiveisRepository.findTipoByCodigo(slug);
+  if (existente) {
+    const err = new Error('Já existe um consumível com este código.');
+    err.status = 409;
+    throw err;
+  }
+  const maxOrdem = await models.ConsumivelTipo.max('ordem');
+  return consumiveisRepository.createTipo({
+    codigo: slug,
+    nome: String(nome).trim(),
+    unidade: unidade?.trim() || null,
+    sistema: false,
+    ordem: (Number(maxOrdem) || 0) + 1,
+    ativo: true,
+  });
+}
+
+export async function criarRegistosLote({ data_aquisicao, data_termino, observacoes_compra, itens }, registadoPorId) {
+  if (!itens?.length) {
+    const err = new Error('Informe pelo menos um item.');
+    err.status = 400;
+    throw err;
+  }
+
+  const codigos = [...new Set(itens.map((i) => i.tipo))];
+  const tiposDb = await consumiveisRepository.findTiposByCodigos(codigos);
+  const codigosValidos = new Set(tiposDb.map((t) => t.codigo));
+  const invalidos = codigos.filter((c) => !codigosValidos.has(c));
+  if (invalidos.length) {
+    const err = new Error(`Tipos inválidos: ${invalidos.join(', ')}`);
+    err.status = 400;
+    throw err;
+  }
+
+  const compraLoteId = consumiveisRepository.novoCompraLoteId();
+  const transaction = await models.sequelize.transaction();
+
+  try {
+    const payloads = itens.map((item) => ({
+      provincia_id: item.provincia_id,
+      departamento_id: item.departamento_id || null,
+      tipo: item.tipo,
+      quantidade: item.quantidade,
+      preco_unitario: item.preco_unitario,
+      preco_total: calcularPrecoTotal(item.quantidade, item.preco_unitario),
+      data_aquisicao,
+      data_termino: data_termino || null,
+      observacoes: [observacoes_compra, item.observacoes].filter(Boolean).join(' | ') || null,
+      registado_por_id: registadoPorId || null,
+      compra_lote_id: compraLoteId,
+    }));
+
+    await consumiveisRepository.createRegistosBulk(payloads, transaction);
+    await transaction.commit();
+
+    const rows = await models.ConsumivelRegisto.findAll({
+      where: { compra_lote_id: compraLoteId },
+      include: [
+        { model: models.Provincia, as: 'provincia', attributes: ['id', 'nome'] },
+        { model: models.DepartamentoGestao, as: 'departamento', attributes: ['id', 'nome'], required: false },
+      ],
+      order: [['id', 'ASC']],
+    });
+
+    return { compra_lote_id: compraLoteId, registos: rows };
+  } catch (e) {
+    await transaction.rollback();
+    throw e;
+  }
 }
 
 export function metricasPapelA4(registo) {
@@ -153,8 +253,6 @@ export async function obterDashboardConsumiveis() {
   };
 }
 
-const TIPOS_CONSUMIVEL = ['papel_a4', 'envelope', 'toner', 'agrafos'];
-
 /** Relatório consolidado de consumíveis por província/distrito (balcão). */
 export async function relatorioConsumoPorProvincia({ de, ate } = {}) {
   const replacements = {};
@@ -213,15 +311,19 @@ export async function relatorioConsumoPorProvincia({ de, ate } = {}) {
     },
   }));
 
-  const resumo_por_tipo = TIPOS_CONSUMIVEL.map((tipo) => {
-    const found = porTipoRaw.find((x) => x.tipo === tipo);
-    return {
-      tipo,
-      num_registos: found ? num(found.num_registos) : 0,
-      quantidade: found ? num(found.quantidade) : 0,
-      gasto_mzn: found ? num(found.gasto_mzn) : 0,
-    };
-  });
+  const resumo_por_tipo = porTipoRaw.map((row) => ({
+    tipo: row.tipo,
+    num_registos: num(row.num_registos),
+    quantidade: num(row.quantidade),
+    gasto_mzn: num(row.gasto_mzn),
+  }));
+
+  for (const tipo of TIPOS_CONSUMIVEL) {
+    if (!resumo_por_tipo.some((r) => r.tipo === tipo)) {
+      resumo_por_tipo.push({ tipo, num_registos: 0, quantidade: 0, gasto_mzn: 0 });
+    }
+  }
+  resumo_por_tipo.sort((a, b) => a.tipo.localeCompare(b.tipo));
 
   const totais = {
     num_registos: num(totAgg?.num_registos),

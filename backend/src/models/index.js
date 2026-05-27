@@ -8,6 +8,7 @@ import LogSistemaModel from './LogSistema.js';
 import ProvinciaModel from './Provincia.js';
 import DepartamentoGestaoModel from './DepartamentoGestao.js';
 import ConsumivelRegistoModel from './ConsumivelRegisto.js';
+import ConsumivelTipoModel from './ConsumivelTipo.js';
 import ConsumivelAnexoModel from './ConsumivelAnexo.js';
 import PapercutImportJobModel from './PapercutImportJob.js';
 import PapercutLinhaModel from './PapercutLinha.js';
@@ -37,6 +38,7 @@ const LogSistema = LogSistemaModel(sequelize);
 const Provincia = ProvinciaModel(sequelize);
 const DepartamentoGestao = DepartamentoGestaoModel(sequelize);
 const ConsumivelRegisto = ConsumivelRegistoModel(sequelize);
+const ConsumivelTipo = ConsumivelTipoModel(sequelize);
 const ConsumivelAnexo = ConsumivelAnexoModel(sequelize);
 const PapercutImportJob = PapercutImportJobModel(sequelize);
 const PapercutLinha = PapercutLinhaModel(sequelize);
@@ -88,6 +90,7 @@ const models = {
   Provincia,
   DepartamentoGestao,
   ConsumivelRegisto,
+  ConsumivelTipo,
   ConsumivelAnexo,
   PapercutImportJob,
   PapercutLinha,

@@ -119,12 +119,16 @@ const dataTerminoConsumivel = Joi.any()
     return value;
   });
 
+const codigoTipoConsumivel = Joi.string()
+  .pattern(/^[a-z][a-z0-9_]{0,63}$/)
+  .messages({ 'string.pattern.base': 'Código de tipo inválido' });
+
 const consumivelListQuery = Joi.object({
   page: Joi.number().integer().min(1).default(1),
   limit: Joi.number().integer().min(1).max(200).default(25),
   provinciaId: Joi.string().uuid().allow('', null),
   departamentoId: Joi.string().uuid().allow('', null),
-  tipo: Joi.string().valid('papel_a4', 'envelope', 'toner', 'agrafos').allow('', null),
+  tipo: codigoTipoConsumivel.allow('', null),
   de: Joi.date().iso(),
   ate: Joi.date().iso(),
   search: Joi.string().max(255).allow('', null),
@@ -137,7 +141,7 @@ const dataRelatorioProvincia = Joi.string()
 const consumivelFiltrosRelatorioBase = {
   provinciaId: Joi.string().uuid().allow('', null),
   departamentoId: Joi.string().uuid().allow('', null),
-  tipo: Joi.string().valid('papel_a4', 'envelope', 'toner', 'agrafos').allow('', null),
+  tipo: codigoTipoConsumivel.allow('', null),
 };
 
 const consumivelRelatorioMensalQuery = Joi.object({
@@ -178,7 +182,7 @@ const papercutUsuarioRelatorioExportQuery = papercutUsuarioRelatorioQuery.keys({
 const consumivelRegistoCreate = Joi.object({
   provincia_id: Joi.string().uuid().required(),
   departamento_id: Joi.string().uuid().allow(null, ''),
-  tipo: Joi.string().valid('papel_a4', 'envelope', 'toner', 'agrafos').required(),
+  tipo: codigoTipoConsumivel.required(),
   quantidade: Joi.number().positive().required(),
   preco_unitario: Joi.number().min(0).required(),
   data_aquisicao: Joi.date().required(),
@@ -186,10 +190,32 @@ const consumivelRegistoCreate = Joi.object({
   observacoes: Joi.string().max(5000).allow(null, ''),
 });
 
+const consumivelLoteItem = Joi.object({
+  provincia_id: Joi.string().uuid().required(),
+  departamento_id: Joi.string().uuid().allow(null, ''),
+  tipo: codigoTipoConsumivel.required(),
+  quantidade: Joi.number().positive().required(),
+  preco_unitario: Joi.number().min(0).required(),
+  observacoes: Joi.string().max(5000).allow(null, ''),
+});
+
+const consumivelRegistoLoteCreate = Joi.object({
+  data_aquisicao: Joi.date().required(),
+  data_termino: dataTerminoConsumivel,
+  observacoes_compra: Joi.string().max(5000).allow(null, ''),
+  itens: Joi.array().items(consumivelLoteItem).min(1).max(50).required(),
+});
+
+const consumivelTipoCreate = Joi.object({
+  nome: Joi.string().min(2).max(120).required(),
+  unidade: Joi.string().max(40).allow(null, ''),
+  codigo: codigoTipoConsumivel.optional(),
+});
+
 const consumivelRegistoUpdate = Joi.object({
   provincia_id: Joi.string().uuid(),
   departamento_id: Joi.string().uuid().allow(null, ''),
-  tipo: Joi.string().valid('papel_a4', 'envelope', 'toner', 'agrafos'),
+  tipo: codigoTipoConsumivel,
   quantidade: Joi.number().positive(),
   preco_unitario: Joi.number().min(0),
   data_aquisicao: Joi.date(),
@@ -251,6 +277,8 @@ export default {
   mesRelatorio,
   consumivelListQuery,
   consumivelRegistoCreate,
+  consumivelRegistoLoteCreate,
+  consumivelTipoCreate,
   consumivelRegistoUpdate,
   consumivelRelatorioProvinciaQuery,
   consumivelRelatorioProvinciaExportQuery,

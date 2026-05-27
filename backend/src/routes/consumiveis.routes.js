@@ -6,6 +6,8 @@ import {
   catalogos,
   list,
   create,
+  createLote,
+  createTipo,
   update,
   remove,
   consumiveisAnexosMulter,
@@ -68,11 +70,25 @@ router.get(
 );
 router.get('/registos', authJwt, validate(schemas.consumivelListQuery, 'query'), list);
 router.post(
+  '/registos/lote',
+  authJwt,
+  requireAdmin,
+  validate(schemas.consumivelRegistoLoteCreate),
+  createLote
+);
+router.post(
   '/registos',
   authJwt,
   requireAdmin,
   validate(schemas.consumivelRegistoCreate),
   create
+);
+router.post(
+  '/tipos',
+  authJwt,
+  requireAdmin,
+  validate(schemas.consumivelTipoCreate),
+  createTipo
 );
 router.patch(
   '/registos/:id',

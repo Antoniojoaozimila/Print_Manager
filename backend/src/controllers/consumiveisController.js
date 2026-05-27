@@ -13,6 +13,9 @@ import {
   relatorioConsumoPorProvincia,
   exportPayloadRegistosPeriodo,
   exportPayloadMapaCompleto,
+  validarTipoConsumivel,
+  criarRegistosLote,
+  criarTipoConsumivel,
 } from '../modules/consumiveis/consumiveis.service.js';
 import {
   exportarRelatorioConsumoPorProvincia,
@@ -34,11 +37,19 @@ const consumiveisAnexosMulter = multer({
 
 async function catalogos(req, res, next) {
   try {
-    const [provincias, departamentos] = await Promise.all([
+    const [provincias, departamentos, tipos] = await Promise.all([
       consumiveisRepository.listProvincias(),
       consumiveisRepository.listDepartamentos(),
+      consumiveisRepository.listTipos(),
     ]);
-    res.json({ success: true, data: { provincias, departamentos } });
+    res.json({
+      success: true,
+      data: {
+        provincias,
+        departamentos,
+        tipos: tipos.map((t) => t.toJSON()),
+      },
+    });
   } catch (e) {
     next(e);
   }
@@ -60,6 +71,7 @@ async function list(req, res, next) {
 async function create(req, res, next) {
   try {
     const body = { ...req.body };
+    await validarTipoConsumivel(body.tipo);
     const preco_total = calcularPrecoTotal(body.quantidade, body.preco_unitario);
     const row = await consumiveisRepository.createRegisto({
       ...body,
@@ -69,6 +81,31 @@ async function create(req, res, next) {
     });
     const full = await consumiveisRepository.findRegistoById(row.id);
     res.status(201).json({ success: true, data: full.toJSON() });
+  } catch (e) {
+    next(e);
+  }
+}
+
+async function createLote(req, res, next) {
+  try {
+    const resultado = await criarRegistosLote(req.body, req.user?.id || null);
+    res.status(201).json({
+      success: true,
+      data: {
+        compra_lote_id: resultado.compra_lote_id,
+        num_registos: resultado.registos.length,
+        registos: resultado.registos.map((r) => r.toJSON()),
+      },
+    });
+  } catch (e) {
+    next(e);
+  }
+}
+
+async function createTipo(req, res, next) {
+  try {
+    const row = await criarTipoConsumivel(req.body);
+    res.status(201).json({ success: true, data: row.toJSON() });
   } catch (e) {
     next(e);
   }
@@ -89,6 +126,7 @@ async function update(req, res, next) {
       const pu = body.preco_unitario != null ? body.preco_unitario : cur.preco_unitario;
       body.preco_total = calcularPrecoTotal(q, pu);
     }
+    if (body.tipo) await validarTipoConsumivel(body.tipo);
     const row = await consumiveisRepository.updateRegisto(req.params.id, body);
     if (!row) {
       const err = new Error('Registo não encontrado');
@@ -420,6 +458,8 @@ export {
   catalogos,
   list,
   create,
+  createLote,
+  createTipo,
   update,
   remove,
   consumiveisAnexosMulter,

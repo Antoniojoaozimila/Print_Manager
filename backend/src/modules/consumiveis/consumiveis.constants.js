@@ -5,6 +5,30 @@ export const FOLHAS_POR_CAIXA_A4 = FOLHAS_POR_RESMA_A4 * RESMAS_POR_CAIXA_A4;
 
 export const TIPOS_CONSUMIVEL = ['papel_a4', 'envelope', 'toner', 'agrafos'];
 
+export const TIPOS_CONSUMIVEL_LABEL = {
+  papel_a4: 'Papel A4 (caixas)',
+  envelope: 'Envelope',
+  toner: 'Toner',
+  agrafos: 'Agrafos',
+};
+
+export const TIPOS_CONSUMIVEL_UNIDADE = {
+  papel_a4: 'caixas',
+  envelope: 'unidades',
+  toner: 'unidades',
+  agrafos: 'unidades',
+};
+
+export function slugifyTipoCodigo(nome) {
+  return String(nome || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 64) || 'tipo';
+}
+
 export function folhasParaUnidadesA4(folhas) {
   const f = Math.max(0, Number(folhas) || 0);
   return {
