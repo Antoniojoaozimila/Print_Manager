@@ -126,6 +126,7 @@ SELECT v.nome, v.ordem, 1 FROM (
   UNION ALL SELECT 'Chókwè', 4 UNION ALL SELECT 'Maxixe', 5 UNION ALL SELECT 'Beira', 6
   UNION ALL SELECT 'Chimoio', 7 UNION ALL SELECT 'Quelimane', 8 UNION ALL SELECT 'Lichinga', 9
   UNION ALL SELECT 'Nacala', 10 UNION ALL SELECT 'Nampula', 11 UNION ALL SELECT 'Pemba', 12
+  UNION ALL SELECT 'Tete', 13 UNION ALL SELECT 'Angonia', 14
 ) v
 WHERE NOT EXISTS (SELECT 1 FROM provincias p WHERE p.nome = v.nome);
 

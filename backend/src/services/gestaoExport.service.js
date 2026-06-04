@@ -31,6 +31,13 @@ const TIPO_CONSUMIVEL_REL = {
   agrafos: 'Agrafos',
 };
 
+/** Valor monetário: vazio se não houver dado real. */
+function nm(v) {
+  if (v == null || v === '') return '';
+  const x = Number(v);
+  return Number.isFinite(x) ? x : '';
+}
+
 const DOC_TIPO_REL = {
   cotacao: 'Cotação',
   fatura: 'Fatura',
@@ -68,8 +75,6 @@ function adicionarAbasUtilizadoresMensal(wb, data, logoBuf, titulo, periodoTxt, 
   wsR.addRow(['Utilizadores', n(rsum.num_utilizadores)]);
   wsR.addRow(['Total impressões (jobs)', n(rsum.total_impressoes)]);
   wsR.addRow(['Total folhas', n(rsum.total_folhas)]);
-  wsR.addRow(['Custo estimado (MZN)', n(rsum.custo_estimado_mzn)]);
-  wsR.lastRow.getCell(2).numFmt = '#,##0.00';
   wsR.addRow([]);
   wsR.addRow([
     'Utilizador',
@@ -80,7 +85,6 @@ function adicionarAbasUtilizadoresMensal(wb, data, logoBuf, titulo, periodoTxt, 
     'Duplex (folhas)',
     'Grayscale (folhas)',
     'Cor (folhas)',
-    'Custo est. (MZN)',
   ]);
   wsR.lastRow.font = { bold: true, color: { argb: excelArgb(IMPERIAL_BRAND.textOnPrimaryHex) } };
   wsR.lastRow.fill = {
@@ -99,9 +103,7 @@ function adicionarAbasUtilizadoresMensal(wb, data, logoBuf, titulo, periodoTxt, 
       n(e.impressoes_duplex_folhas),
       n(e.impressoes_grayscale_folhas),
       n(e.impressoes_coloridas_folhas),
-      n(e.custo_estimado_mzn),
     ]);
-    row.getCell(9).numFmt = '#,##0.00';
   }
   wsR.getColumn(1).width = 22;
   wsR.getColumn(6).width = 14;
@@ -228,23 +230,21 @@ export async function exportarRelatorioMensal(data, formato, options = {}) {
       fgColor: { argb: excelArgb(IMPERIAL_BRAND.primaryHex) },
     };
     const fin = data.financeiro || {};
+    const precos = data.precos_referencia || {};
     const kpiRows = [
       ['Folhas impressas', n(data.totais?.folhas)],
-      ['Resmas A4 (est.)', n(data.totais?.resmas ?? data.estimativas?.resmas_a4)],
-      ['Caixas A4 (est.)', n(data.totais?.caixas ?? data.estimativas?.caixas_a4)],
+      ['Resmas A4', n(data.totais?.resmas)],
+      ['Caixas A4', n(data.totais?.caixas)],
       ['Jobs', n(data.totais?.jobs)],
       ['Duplex (folhas)', n(data.totais?.folhas_duplex)],
       ['Grayscale (folhas)', n(data.totais?.folhas_gray)],
       ['Cor / não-grayscale (folhas)', n(data.totais?.folhas_cor_ou_nao_gray)],
-      ['Toner (índice relativo)', n(data.estimativas?.toner_relativo)],
-      ['Preço por folha (MZN)', n(fin.preco_por_folha_mzn ?? data.precos_referencia?.preco_por_folha_mzn)],
-      ['Custo papel (MZN)', n(fin.gasto_papel_mzn ?? data.estimativas?.gasto_papel_mzn)],
-      ['Custo toner (MZN)', n(fin.gasto_toner_mzn ?? data.estimativas?.gasto_toner_estimado_mzn)],
-      ['Custo total impressão (MZN)', n(fin.custo_total_mzn ?? data.estimativas?.custo_total_estimado_mzn)],
-      ['Aquisições consumíveis no mês (MZN)', n(fin.gasto_aquisicoes_consumiveis_mes ?? data.resumo_consumiveis_mes?.total_mzn)],
-      ['Média custo mensal 6 meses (MZN)', n(fin.media_custo_mensal_mzn)],
-      ['Tendência custo vs mês ant. (%)', n(fin.tendencia_custo_mensal_pct)],
-    ];
+      ['Aquisições consumíveis no mês (MZN)', nm(fin.custo_mes_real_mzn ?? data.resumo_consumiveis_mes?.total_mzn)],
+      ['Aquisições papel A4 (MZN)', nm(fin.gasto_papel_aquisicoes_mzn)],
+      ['Aquisições toner (MZN)', nm(fin.gasto_toner_aquisicoes_mzn)],
+      ['Preço caixa A4 registada (MZN)', nm(fin.preco_por_caixa_mzn ?? precos.preco_por_caixa_mzn)],
+      ['Preço toner registado (MZN)', nm(fin.preco_por_unidade_toner_mzn ?? precos.preco_por_unidade_toner_mzn)],
+    ].filter(([, val]) => val !== '' && val !== null && val !== undefined);
     for (const [a, b] of kpiRows) {
       const row = ws.addRow([a, b]);
       const c2 = row.getCell(2);
@@ -262,8 +262,16 @@ export async function exportarRelatorioMensal(data, formato, options = {}) {
     ws.getColumn(2).width = 22;
 
     const wsProv = wb.addWorksheet('Por província');
-    applyExcelBrandedHeader(wsProv, wb, logoBuf, `${titulo} — custos por província`, periodoTxt, isDemo);
-    wsProv.addRow(['Província', 'Folhas', 'Resmas', 'Caixas', 'Custo papel (MZN)', 'Custo toner (MZN)', 'Custo total (MZN)']);
+    applyExcelBrandedHeader(wsProv, wb, logoBuf, `${titulo} — por província`, periodoTxt, isDemo);
+    wsProv.addRow([
+      'Província',
+      'Folhas',
+      'Resmas',
+      'Caixas',
+      'Aquisições mês (MZN)',
+      'Papel A4 (MZN)',
+      'Toner (MZN)',
+    ]);
     const hdrProv = wsProv.lastRow;
     hdrProv.font = { bold: true, color: { argb: excelArgb(IMPERIAL_BRAND.textOnPrimaryHex) } };
     hdrProv.fill = {
@@ -277,9 +285,9 @@ export async function exportarRelatorioMensal(data, formato, options = {}) {
         n(row.folhas),
         n(row.resmas),
         n(row.caixas),
-        n(row.gasto_papel_mzn),
-        n(row.gasto_toner_mzn),
-        n(row.custo_total_mzn),
+        nm(row.aquisicoes_mes_mzn ?? row.custo_mes_real_mzn),
+        nm(row.gasto_papel_aquisicoes_mzn),
+        nm(row.gasto_toner_aquisicoes_mzn),
       ]);
       [5, 6, 7].forEach((c) => {
         r.getCell(c).numFmt = '#,##0.00';
@@ -302,8 +310,8 @@ export async function exportarRelatorioMensal(data, formato, options = {}) {
     }
 
     const wsDept = wb.addWorksheet('Por departamento');
-    applyExcelBrandedHeader(wsDept, wb, logoBuf, `${titulo} — custos por departamento`, periodoTxt, isDemo);
-    wsDept.addRow(['Departamento', 'Folhas', 'Resmas', 'Caixas', 'Custo papel (MZN)', 'Custo toner (MZN)', 'Custo total (MZN)']);
+    applyExcelBrandedHeader(wsDept, wb, logoBuf, `${titulo} — por departamento`, periodoTxt, isDemo);
+    wsDept.addRow(['Departamento', 'Folhas', 'Resmas', 'Caixas']);
     const hdrDept = wsDept.lastRow;
     hdrDept.font = { bold: true, color: { argb: excelArgb(IMPERIAL_BRAND.textOnPrimaryHex) } };
     hdrDept.fill = {
@@ -312,18 +320,7 @@ export async function exportarRelatorioMensal(data, formato, options = {}) {
       fgColor: { argb: excelArgb(IMPERIAL_BRAND.primaryHex) },
     };
     for (const row of porDept) {
-      const r = wsDept.addRow([
-        row.departamento,
-        n(row.folhas),
-        n(row.resmas),
-        n(row.caixas),
-        n(row.gasto_papel_mzn),
-        n(row.gasto_toner_mzn),
-        n(row.custo_total_mzn),
-      ]);
-      [5, 6, 7].forEach((c) => {
-        r.getCell(c).numFmt = '#,##0.00';
-      });
+      wsDept.addRow([row.departamento, n(row.folhas), n(row.resmas), n(row.caixas)]);
     }
     wsDept.getColumn(1).width = 36;
     wsDept.getColumn(2).width = 12;
@@ -343,7 +340,7 @@ export async function exportarRelatorioMensal(data, formato, options = {}) {
 
     const wsU = wb.addWorksheet('Top utilizadores');
     applyExcelBrandedHeader(wsU, wb, logoBuf, `${titulo} — utilizadores`, periodoTxt, isDemo);
-    wsU.addRow(['Utilizador', 'Folhas', 'Custo total (MZN)']);
+    wsU.addRow(['Utilizador', 'Folhas']);
     wsU.lastRow.font = { bold: true, color: { argb: excelArgb(IMPERIAL_BRAND.textOnPrimaryHex) } };
     wsU.lastRow.fill = {
       type: 'pattern',
@@ -351,8 +348,7 @@ export async function exportarRelatorioMensal(data, formato, options = {}) {
       fgColor: { argb: excelArgb(IMPERIAL_BRAND.primaryHex) },
     };
     for (const u of topUsers) {
-      const r = wsU.addRow([u.usuario_papercut, n(u.folhas), n(u.custo_total_mzn)]);
-      r.getCell(3).numFmt = '#,##0.00';
+      wsU.addRow([u.usuario_papercut, n(u.folhas)]);
     }
     wsU.getColumn(1).width = 28;
     wsU.getColumn(2).width = 14;
@@ -474,8 +470,20 @@ export async function exportarRelatorioMensal(data, formato, options = {}) {
     const fin = data.financeiro || {};
     const rsumU = data.resumo_utilizadores_mes || {};
     const rsumC = data.resumo_consumiveis_mes || { num_registos: 0, total_mzn: 0 };
-    const fonte =
-      data.precos_referencia?.fonte === 'consumiveis' ? 'Preços reais (consumíveis)' : 'Referência padrão';
+    const docxResumo = [
+      ['Folhas impressas', fmtInt(data.totais?.folhas)],
+      ['Resmas A4', String(data.totais?.resmas ?? '—')],
+      ['Caixas A4', String(data.totais?.caixas ?? '—')],
+      ['Jobs', fmtInt(data.totais?.jobs)],
+    ];
+    const totalMes = fin.custo_mes_real_mzn ?? rsumC.total_mzn;
+    if (totalMes > 0) docxResumo.push(['Aquisições no mês (MZN)', fmtMoney(totalMes)]);
+    if (fin.gasto_papel_aquisicoes_mzn > 0) {
+      docxResumo.push(['Aquisições papel A4 (MZN)', fmtMoney(fin.gasto_papel_aquisicoes_mzn)]);
+    }
+    if (fin.gasto_toner_aquisicoes_mzn > 0) {
+      docxResumo.push(['Aquisições toner (MZN)', fmtMoney(fin.gasto_toner_aquisicoes_mzn)]);
+    }
 
     const children = [
       ...docxLogoParagraph(logoBuf),
@@ -485,62 +493,46 @@ export async function exportarRelatorioMensal(data, formato, options = {}) {
         badge: isDemo ? 'DEMONSTRAÇÃO' : '',
       }),
       docxHeading('Resumo executivo'),
-      ...docxKeyValueTable([
-        ['Folhas impressas', fmtInt(data.totais?.folhas)],
-        ['Resmas A4 (est.)', String(data.totais?.resmas ?? data.estimativas?.resmas_a4 ?? '—')],
-        ['Caixas A4 (est.)', String(data.totais?.caixas ?? data.estimativas?.caixas_a4 ?? '—')],
-        ['Jobs', fmtInt(data.totais?.jobs)],
-        ['Custo papel (MZN)', fmtMoney(fin.gasto_papel_mzn ?? data.estimativas?.gasto_papel_mzn)],
-        ['Custo toner (MZN)', fmtMoney(fin.gasto_toner_mzn ?? data.estimativas?.gasto_toner_estimado_mzn)],
-        ['Custo total impressão (MZN)', fmtMoney(fin.custo_total_mzn ?? data.estimativas?.custo_total_estimado_mzn)],
-        ['Aquisições consumíveis (MZN)', fmtMoney(fin.gasto_aquisicoes_consumiveis_mes ?? rsumC.total_mzn)],
-        ['Fonte de preços', fonte],
-        ['Preço por folha (MZN)', String(fin.preco_por_folha_mzn ?? data.precos_referencia?.preco_por_folha_mzn ?? '—')],
-      ]),
-      docxHeading('Custos por província'),
+      ...docxKeyValueTable(docxResumo),
+      docxHeading('Aquisições por província'),
       ...docxTable(
         [
           { header: 'Província', width: 18 },
           { header: 'Folhas', width: 10 },
-          { header: 'Resmas', width: 9 },
-          { header: 'Custo papel', width: 12 },
-          { header: 'Custo toner', width: 12 },
-          { header: 'Total', width: 12 },
+          { header: 'Aquisições (MZN)', width: 14 },
+          { header: 'Papel (MZN)', width: 12 },
+          { header: 'Toner (MZN)', width: 12 },
         ],
         porProv.map((r) => [
           r.provincia,
           fmtInt(r.folhas),
-          fmtInt(r.resmas),
-          fmtMoney(r.gasto_papel_mzn),
-          fmtMoney(r.gasto_toner_mzn),
-          fmtMoney(r.custo_total_mzn),
+          r.aquisicoes_mes_mzn > 0 ? fmtMoney(r.aquisicoes_mes_mzn) : '—',
+          r.gasto_papel_aquisicoes_mzn > 0 ? fmtMoney(r.gasto_papel_aquisicoes_mzn) : '—',
+          r.gasto_toner_aquisicoes_mzn > 0 ? fmtMoney(r.gasto_toner_aquisicoes_mzn) : '—',
         ])
       ),
-      docxHeading('Custos por departamento'),
+      docxHeading('Volume por departamento'),
       ...docxTable(
         [
           { header: 'Departamento', width: 22 },
           { header: 'Folhas', width: 10 },
-          { header: 'Caixas est.', width: 10 },
-          { header: 'Custo total (MZN)', width: 14 },
+          { header: 'Caixas', width: 10 },
         ],
-        porDept.map((r) => [r.departamento, fmtInt(r.folhas), fmtInt(r.caixas), fmtMoney(r.custo_total_mzn)])
+        porDept.map((r) => [r.departamento, fmtInt(r.folhas), fmtInt(r.caixas)])
       ),
-      docxHeading('Top utilizadores (volume e custo)'),
+      docxHeading('Top utilizadores (volume)'),
       ...docxTable(
         [
           { header: 'Utilizador', width: 22 },
           { header: 'Folhas', width: 12 },
-          { header: 'Custo (MZN)', width: 14 },
         ],
-        topUsers.map((u) => [u.usuario_papercut, fmtInt(u.folhas), fmtMoney(u.custo_total_mzn)])
+        topUsers.map((u) => [u.usuario_papercut, fmtInt(u.folhas)])
       ),
       docxHeading('Impressões por utilizador'),
       ...docxKeyValueTable([
         ['Utilizadores', fmtInt(rsumU.num_utilizadores)],
         ['Total jobs', fmtInt(rsumU.total_impressoes)],
         ['Total folhas', fmtInt(rsumU.total_folhas)],
-        ['Custo estimado (MZN)', fmtMoney(rsumU.custo_estimado_mzn)],
       ]),
       ...docxTable(
         [
@@ -548,11 +540,10 @@ export async function exportarRelatorioMensal(data, formato, options = {}) {
           { header: 'Dept.', width: 14 },
           { header: 'Folhas', width: 10 },
           { header: 'Jobs', width: 8 },
-          { header: 'Custo (MZN)', width: 12 },
         ],
         (data.utilizadores || []).slice(0, 80).map((u) => {
           const e = u.estatisticas || {};
-          return [u.usuario, u.departamento || '—', fmtInt(e.total_folhas), fmtInt(e.total_impressoes), fmtMoney(e.custo_estimado_mzn)];
+          return [u.usuario, u.departamento || '—', fmtInt(e.total_folhas), fmtInt(e.total_impressoes)];
         }),
         { maxRows: 80 }
       ),
@@ -598,67 +589,73 @@ export async function exportarRelatorioMensal(data, formato, options = {}) {
     isDemo,
   });
 
-  pdfSectionTitle(docPdf, 'Resumo executivo', 'Volumes PaperCut e custos com preços dos consumíveis');
-  pdfKpiGrid(docPdf, [
+  pdfSectionTitle(docPdf, 'Resumo executivo', 'Volumes PaperCut e aquisições reais de consumíveis');
+  const pdfKpis = [
     { label: 'Folhas impressas', value: fmtInt(data.totais?.folhas) },
     { label: 'Resmas / caixas A4', value: `${data.totais?.resmas ?? '—'} / ${data.totais?.caixas ?? '—'}` },
-    { label: 'Custo total (MZN)', value: fmtMoney(fin.custo_total_mzn ?? data.estimativas?.custo_total_estimado_mzn) },
-    { label: 'Custo papel (MZN)', value: fmtMoney(fin.gasto_papel_mzn ?? data.estimativas?.gasto_papel_mzn) },
-    { label: 'Custo toner (MZN)', value: fmtMoney(fin.gasto_toner_mzn ?? data.estimativas?.gasto_toner_estimado_mzn) },
-    { label: 'Aquisições consumíveis', value: fmtMoney(fin.gasto_aquisicoes_consumiveis_mes ?? data.resumo_consumiveis_mes?.total_mzn) },
-  ]);
+  ];
+  const pdfTotal = fin.custo_mes_real_mzn ?? data.resumo_consumiveis_mes?.total_mzn;
+  if (pdfTotal > 0) pdfKpis.push({ label: 'Aquisições no mês', value: fmtMoney(pdfTotal) });
+  pdfKpiGrid(docPdf, pdfKpis);
 
-  pdfHorizontalBarChart(docPdf, 'Comparativo — custo por província (MZN)', porProv, (r) => r.provincia, (r) => r.custo_total_mzn, fmtMoney);
+  const provComAquis = porProv.filter((r) => (r.aquisicoes_mes_mzn ?? 0) > 0);
+  if (provComAquis.length) {
+    pdfHorizontalBarChart(
+      docPdf,
+      'Aquisições reais por província (MZN)',
+      provComAquis,
+      (r) => r.provincia,
+      (r) => r.aquisicoes_mes_mzn,
+      fmtMoney
+    );
+  }
   pdfDataTable(
     docPdf,
     [
       { header: 'Província', key: 'p', width: 1.2 },
-      { header: 'Folhas', key: 'f', width: 0.8 },
-      { header: '$ Papel', key: 'cp', width: 1 },
-      { header: '$ Toner', key: 'ct', width: 1 },
-      { header: 'Total', key: 't', width: 1 },
+      { header: 'Folhas', key: 'f', width: 0.7 },
+      { header: 'Aquisições', key: 'aq', width: 1 },
+      { header: 'Papel', key: 'pp', width: 0.9 },
+      { header: 'Toner', key: 'tn', width: 0.9 },
     ],
     porProv.map((r) => ({
       p: r.provincia,
       f: fmtInt(r.folhas),
-      cp: fmtMoney(r.gasto_papel_mzn),
-      ct: fmtMoney(r.gasto_toner_mzn),
-      t: fmtMoney(r.custo_total_mzn),
+      aq: r.aquisicoes_mes_mzn > 0 ? fmtMoney(r.aquisicoes_mes_mzn) : '—',
+      pp: r.gasto_papel_aquisicoes_mzn > 0 ? fmtMoney(r.gasto_papel_aquisicoes_mzn) : '—',
+      tn: r.gasto_toner_aquisicoes_mzn > 0 ? fmtMoney(r.gasto_toner_aquisicoes_mzn) : '—',
     })),
     { fontSize: 8 }
   );
 
-  pdfSectionTitle(docPdf, 'Custos por departamento');
+  pdfSectionTitle(docPdf, 'Volume por departamento');
   pdfDataTable(
     docPdf,
     [
       { header: 'Departamento', key: 'd', width: 1.5 },
       { header: 'Folhas', key: 'f', width: 0.8 },
       { header: 'Caixas', key: 'c', width: 0.7 },
-      { header: 'Total MZN', key: 't', width: 1 },
     ],
     porDept.map((r) => ({
       d: (r.departamento || '—').slice(0, 28),
       f: fmtInt(r.folhas),
       c: fmtInt(r.caixas),
-      t: fmtMoney(r.custo_total_mzn),
     }))
   );
 
-  pdfSectionTitle(docPdf, 'Utilizadores — resumo e custos');
+  pdfSectionTitle(docPdf, 'Utilizadores — resumo');
   const rsumUPdf = data.resumo_utilizadores_mes || {};
   pdfKpiGrid(docPdf, [
     { label: 'Utilizadores', value: fmtInt(rsumUPdf.num_utilizadores) },
     { label: 'Jobs', value: fmtInt(rsumUPdf.total_impressoes) },
-    { label: 'Custo total (MZN)', value: fmtMoney(rsumUPdf.custo_estimado_mzn) },
+    { label: 'Folhas', value: fmtInt(rsumUPdf.total_folhas) },
   ]);
   pdfDataTable(
     docPdf,
     [
-      { header: 'Utilizador', key: 'u', width: 1.2 },
-      { header: 'Folhas', key: 'f', width: 0.7 },
-      { header: 'Jobs', key: 'j', width: 0.6 },
-      { header: 'Custo MZN', key: 'c', width: 0.9 },
+      { header: 'Utilizador', key: 'u', width: 1.4 },
+      { header: 'Folhas', key: 'f', width: 0.8 },
+      { header: 'Jobs', key: 'j', width: 0.7 },
     ],
     (data.utilizadores || []).slice(0, 50).map((u) => {
       const e = u.estatisticas || {};
@@ -666,7 +663,6 @@ export async function exportarRelatorioMensal(data, formato, options = {}) {
         u: u.usuario,
         f: fmtInt(e.total_folhas),
         j: fmtInt(e.total_impressoes),
-        c: fmtMoney(e.custo_estimado_mzn),
       };
     }),
     { fontSize: 7.5, maxRows: 50 }

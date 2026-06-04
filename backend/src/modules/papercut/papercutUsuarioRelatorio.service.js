@@ -1,6 +1,6 @@
 import { Op } from 'sequelize';
 import models from '../../models/index.js';
-import { calcularCustosImpressao, obterPrecosReferencia } from '../custos/custosIntegracao.service.js';
+import { folhasParaUnidadesA4 } from '../consumiveis/consumiveis.constants.js';
 
 function num(v) {
   const n = Number(v);
@@ -106,7 +106,7 @@ function mapLinhaDetalhe(j) {
   };
 }
 
-function calcularEstatisticasUsuario(row, periodo, precos) {
+function calcularEstatisticasUsuario(row, periodo) {
   const folhas = num(row.folhas);
   const jobs = num(row.jobs);
   const paginas = num(row.paginas);
@@ -114,14 +114,7 @@ function calcularEstatisticasUsuario(row, periodo, precos) {
   const folhas_gray = num(row.folhas_gray);
   const folhas_cor = num(row.folhas_cor);
   const folhas_duplex = num(row.folhas_duplex);
-
-  const custos = calcularCustosImpressao({
-    folhas,
-    folhas_gray,
-    folhas_cor,
-    folhas_duplex,
-    precos,
-  });
+  const unidades = folhasParaUnidadesA4(folhas);
 
   const dias = diasNoPeriodo(periodo);
   const meses = mesesNoPeriodo(periodo);
@@ -134,14 +127,10 @@ function calcularEstatisticasUsuario(row, periodo, precos) {
     impressoes_coloridas_folhas: folhas_cor,
     impressoes_grayscale_folhas: folhas_gray,
     impressoes_duplex_folhas: folhas_duplex,
-    resmas_estimadas: custos.resmas,
-    caixas_a4_estimadas: custos.caixas,
-    toner_estimado: custos.toner_estimado,
-    gasto_papel_mzn: custos.gasto_papel_mzn,
-    gasto_toner_mzn: custos.gasto_toner_mzn,
+    resmas: unidades.resmas,
+    caixas: unidades.caixas,
     media_mensal_impressoes: Math.round((jobs / meses) * 10) / 10,
     media_diaria_folhas: Math.round((folhas / dias) * 10) / 10,
-    custo_estimado_mzn: custos.custo_total_mzn,
   };
 }
 
@@ -157,7 +146,7 @@ function whereComUtilizador(where) {
 }
 
 /** Dados de utilizadores + impressões (para inclusão no relatório mensal unificado). */
-export async function obterUtilizadoresDetalheParaRelatorio(where, periodo, precos) {
+export async function obterUtilizadoresDetalheParaRelatorio(where, periodo) {
   const whereU = whereComUtilizador(where);
 
   const agg = await models.PapercutLinha.findAll({
@@ -214,7 +203,7 @@ export async function obterUtilizadoresDetalheParaRelatorio(where, periodo, prec
       usuario: row.usuario_papercut,
       departamento: null,
       provincia: null,
-      estatisticas: calcularEstatisticasUsuario(row, periodo, precos),
+      estatisticas: calcularEstatisticasUsuario(row, periodo),
       impressoes: [],
     });
   }
@@ -237,10 +226,9 @@ export async function obterUtilizadoresDetalheParaRelatorio(where, periodo, prec
     (acc, u) => {
       acc.jobs += u.estatisticas.total_impressoes;
       acc.folhas += u.estatisticas.total_folhas;
-      acc.custo += u.estatisticas.custo_estimado_mzn;
       return acc;
     },
-    { jobs: 0, folhas: 0, custo: 0 }
+    { jobs: 0, folhas: 0 }
   );
 
   return {
@@ -249,7 +237,6 @@ export async function obterUtilizadoresDetalheParaRelatorio(where, periodo, prec
       num_utilizadores: utilizadores.length,
       total_impressoes: totaisGlobais.jobs,
       total_folhas: totaisGlobais.folhas,
-      custo_estimado_mzn: Math.round(totaisGlobais.custo * 100) / 100,
     },
   };
 }
@@ -257,12 +244,7 @@ export async function obterUtilizadoresDetalheParaRelatorio(where, periodo, prec
 /** @deprecated Use relatório mensal unificado. Mantido para compatibilidade interna. */
 export async function relatorioDetalhadoPorUtilizador(query) {
   const { where, periodo, filtros } = buildFiltrosPapercutUsuario(query);
-  const precos = await obterPrecosReferencia({
-    provinciaId: filtros.provincia_id,
-    de: periodo.de?.slice(0, 10),
-    ate: periodo.ate?.slice(0, 10),
-  });
-  const block = await obterUtilizadoresDetalheParaRelatorio(where, periodo, precos);
+  const block = await obterUtilizadoresDetalheParaRelatorio(where, periodo);
   return {
     emitido_em: new Date().toISOString(),
     periodo,
@@ -271,7 +253,6 @@ export async function relatorioDetalhadoPorUtilizador(query) {
       utilizadores: block.resumo_utilizadores.num_utilizadores,
       total_impressoes: block.resumo_utilizadores.total_impressoes,
       total_folhas: block.resumo_utilizadores.total_folhas,
-      custo_estimado_mzn: block.resumo_utilizadores.custo_estimado_mzn,
     },
     utilizadores: block.utilizadores,
   };

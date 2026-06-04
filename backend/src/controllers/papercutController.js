@@ -6,12 +6,24 @@ import {
   relatorioMensalPapercut,
   analisesPapercut,
 } from '../modules/papercut/papercutImport.service.js';
+import { validarFicheiroUpload } from '../modules/papercut/papercutFileParser.js';
 import { exportarRelatorioMensal } from '../services/gestaoExport.service.js';
 import { obterDadosRelatorioDemo } from '../services/papercutRelatorioDemo.js';
 
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 25 * 1024 * 1024, files: 30 },
+  fileFilter(req, file, cb) {
+    if (validarFicheiroUpload(file)) {
+      cb(null, true);
+      return;
+    }
+    const err = new Error(
+      'Formato não suportado. Envie relatórios PaperCut em CSV ou PDF (também aceite HTML exportado do Print Logger).'
+    );
+    err.status = 400;
+    cb(err);
+  },
 });
 
 async function catalogos(req, res, next) {
@@ -31,19 +43,46 @@ async function importar(req, res, next) {
     const { provincia_id, departamento_id, nome_lote } = req.body;
     const files = req.files || [];
     if (!files.length) {
-      const err = new Error('Envie pelo menos um ficheiro CSV');
+      const err = new Error('Envie pelo menos um ficheiro CSV, HTML ou PDF do PaperCut.');
       err.status = 400;
       throw err;
     }
-    const buffers = files.map((f) => f.buffer);
+
+    const rejeitados = [];
+    const ficheiros = [];
+    for (const f of files) {
+      if (!validarFicheiroUpload(f)) {
+        rejeitados.push(f.originalname || 'ficheiro');
+        continue;
+      }
+      ficheiros.push({
+        buffer: f.buffer,
+        mimetype: f.mimetype,
+        originalname: f.originalname,
+      });
+    }
+
+    if (!ficheiros.length) {
+      const err = new Error(
+        `Nenhum ficheiro válido. Formatos aceites: ${['.csv', '.pdf', '.html'].join(', ')}. Rejeitados: ${rejeitados.join(', ')}`
+      );
+      err.status = 400;
+      throw err;
+    }
+
     const job = await processarImportacaoFicheiros({
       usuarioId: req.user.id,
       provinciaId: provincia_id,
       departamentoId: departamento_id,
       nomeLote: nome_lote,
-      buffers,
+      ficheiros,
     });
-    res.status(201).json({ success: true, data: job.toJSON() });
+
+    const payload = job.toJSON();
+    if (rejeitados.length) {
+      payload.aviso_ficheiros_ignorados = rejeitados;
+    }
+    res.status(201).json({ success: true, data: payload });
   } catch (e) {
     next(e);
   }

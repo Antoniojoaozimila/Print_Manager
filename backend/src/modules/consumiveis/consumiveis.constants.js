@@ -3,6 +3,12 @@ export const FOLHAS_POR_RESMA_A4 = 500;
 export const RESMAS_POR_CAIXA_A4 = 5;
 export const FOLHAS_POR_CAIXA_A4 = FOLHAS_POR_RESMA_A4 * RESMAS_POR_CAIXA_A4;
 
+/** Rendimento de referência de um cartucho de toner (folhas equivalentes) — ajustável por env */
+export function folhasPorCartuchoToner() {
+  const n = parseInt(process.env.TONER_PAGINAS_POR_CARTUCHO || '5000', 10);
+  return Number.isFinite(n) && n > 0 ? n : 5000;
+}
+
 export const TIPOS_CONSUMIVEL = ['papel_a4', 'envelope', 'toner', 'agrafos'];
 
 export const TIPOS_CONSUMIVEL_LABEL = {
@@ -43,19 +49,35 @@ export function precoPorFolhaDeCaixa(precoUnitarioCaixa) {
   return p / FOLHAS_POR_CAIXA_A4;
 }
 
-/** Estimativa toner (unidades relativas ≈ fração de cartucho) — ajustável por env */
-export function estimativaTonerRelativa({ paginas, coloridas, grayscale, duplex }) {
+export function precoPorFolhaTonerDeCartucho(precoUnitarioCartucho) {
+  const p = Number(precoUnitarioCartucho) || 0;
+  return p / folhasPorCartuchoToner();
+}
+
+/**
+ * Folhas “equivalentes” de desgaste de toner (cor pesa mais que cinzento).
+ * Usado para custo operacional = equiv × preço/folha toner (preço cartucho ÷ rendimento).
+ */
+export function paginasEquivalentesToner({ paginas, coloridas, grayscale, duplex }) {
   const p = Math.max(0, Number(paginas) || 0);
   const c = Math.max(0, Number(coloridas) || 0);
   const g = Math.max(0, Number(grayscale) || 0);
   const d = Math.max(0, Number(duplex) || 0);
-  const fColor = parseFloat(process.env.TONER_FACTOR_COLOR || '0.012');
-  const fGray = parseFloat(process.env.TONER_FACTOR_GRAY || '0.0015');
-  const fDuplex = parseFloat(process.env.TONER_FACTOR_DUPLEX_BONUS || '0.0003');
-  return (
-    c * fColor +
-    g * fGray +
-    Math.min(p, g + c) * fDuplex * (d > 0 ? 1 : 0) +
-    (p - c - g > 0 ? (p - c - g) * fGray : 0)
-  );
+  const pesoColor = parseFloat(process.env.TONER_PESO_PAGINA_COLOR || '3');
+  const pesoGray = parseFloat(process.env.TONER_PESO_PAGINA_GRAY || '1');
+  const pesoDuplex = parseFloat(process.env.TONER_PESO_DUPLEX_BONUS || '0.15');
+  const resto = Math.max(0, p - c - g);
+  const base = g * pesoGray + c * pesoColor + resto * pesoGray;
+  const bonusDuplex = d > 0 ? Math.min(p, g + c) * pesoDuplex : 0;
+  return base + bonusDuplex;
+}
+
+/**
+ * Índice técnico: fração de cartuchos consumidos (ex.: 2,5 ≈ 2,5 cartuchos no período).
+ * Não multiplicar directamente pelo preço do cartucho nos relatórios financeiros.
+ */
+export function estimativaTonerRelativa(params) {
+  const equiv = paginasEquivalentesToner(params);
+  const rendimento = folhasPorCartuchoToner();
+  return rendimento > 0 ? equiv / rendimento : 0;
 }

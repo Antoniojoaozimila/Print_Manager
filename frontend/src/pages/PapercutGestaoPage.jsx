@@ -35,7 +35,7 @@ export default function PapercutGestaoPage() {
   async function enviarImport() {
     setMsg('');
     if (!files.length || !provinciaId || !departamentoId) {
-      setMsg('Seleccione província, departamento e ficheiros CSV.');
+      setMsg('Seleccione província, departamento e ficheiros CSV, HTML ou PDF.');
       return;
     }
     const fd = new FormData();
@@ -48,7 +48,14 @@ export default function PapercutGestaoPage() {
         headers: { 'Content-Type': 'multipart/form-data' },
         timeout: 120000,
       });
-      setMsg(`Importação: ${data.data.linhas_inseridas} linhas inseridas.`);
+      const aviso = data.data.aviso_ficheiros_ignorados?.length
+        ? ` (${data.data.aviso_ficheiros_ignorados.length} ficheiro(s) ignorado(s))`
+        : '';
+      const erros = data.data.linhas_erro || 0;
+      const dup = data.data.linhas_duplicadas || 0;
+      const extra =
+        erros > 0 ? ` ${erros} linha(s) com erro (ex.: data inválida).` : dup > 0 ? ` ${dup} duplicada(s).` : '';
+      setMsg(`Importação: ${data.data.linhas_inseridas} linhas inseridas.${extra}${aviso}`);
       const r = await api.get('/papercut/importacoes', { params: { limit: 20 } });
       setImports(r.data.data);
     } catch (e) {
@@ -118,12 +125,17 @@ export default function PapercutGestaoPage() {
       <PageHeader
         badge="PaperCut"
         title="Importação e relatórios"
-        subtitle="Importe CSV por província/departamento e exporte relatórios mensais."
+        subtitle="Importe relatórios PaperCut (CSV, HTML ou PDF) por província/departamento e exporte relatórios mensais."
       />
       {msg && <p className="alert-imperial-warning">{msg}</p>}
 
       <section className="app-card space-y-3">
-        <h2 className="text-white font-medium text-sm hud-section-title">Importar CSV</h2>
+        <h2 className="text-white font-medium text-sm hud-section-title">Importar relatórios</h2>
+        <p className="text-xs text-slate-500">
+          Envie um ou vários ficheiros do PaperCut Print Logger em <strong className="text-slate-400">CSV</strong>,{' '}
+          <strong className="text-slate-400">HTML</strong> ou <strong className="text-slate-400">PDF</strong>. Os dados
+          são normalizados para o mesmo modelo e incluídos nos relatórios XLSX (secção PaperCut).
+        </p>
         <div className="grid sm:grid-cols-2 gap-2">
           <select
             className="select-imperial"
@@ -150,7 +162,13 @@ export default function PapercutGestaoPage() {
             ))}
           </select>
         </div>
-        <input type="file" accept=".csv,text/csv" multiple onChange={(e) => setFiles([...e.target.files])} className="text-sm text-slate-400" />
+        <input
+          type="file"
+          accept=".csv,.pdf,.html,.htm,text/csv,application/pdf,text/html"
+          multiple
+          onChange={(e) => setFiles([...e.target.files])}
+          className="text-sm text-slate-400"
+        />
         <button type="button" onClick={enviarImport} className="btn-imperial">
           Importar
         </button>

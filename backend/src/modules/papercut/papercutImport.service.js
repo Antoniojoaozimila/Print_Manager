@@ -1,200 +1,39 @@
-import { createHash } from 'crypto';
 import { Op } from 'sequelize';
-import { parse } from 'csv-parse/sync';
 import models from '../../models/index.js';
 import { papercutRepository } from './papercut.repository.js';
 import { folhasParaUnidadesA4 } from '../consumiveis/consumiveis.constants.js';
 import { obterUtilizadoresDetalheParaRelatorio } from './papercutUsuarioRelatorio.service.js';
 import {
-  obterPrecosReferencia,
-  calcularCustosImpressao,
-  enriquecerComCustos,
-  evolucaoCustosMensais,
-  tendenciaPercentual,
+  obterPrecosReaisConsumiveis,
+  obterGastoRealConsumiveis,
+  enriquecerVolumesImpressao,
+  enriquecerProvinciaComAquisicoes,
+  enriquecerProvinciasComAquisicoes,
 } from '../custos/custosIntegracao.service.js';
+import { parsePapercutFicheiro } from './papercutFileParser.js';
+import {
+  csvTextoParaRecords,
+  recordsParaLinhas,
+  validarCabecalhoCsv,
+  dedupHash,
+} from './papercutParseCommon.js';
+
+export { validarCabecalhoCsv, dedupHash } from './papercutParseCommon.js';
 
 function num(v) {
   const n = Number(v);
   return Number.isFinite(n) ? n : 0;
 }
 
-function normalizeHeader(h) {
-  return String(h || '')
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, '');
-}
-
-function mapHeaderToCanonical(headers) {
-  const map = {};
-  /** Export "Print Logger" do PaperCut: linha de título + cabeçalhos com nomes compostos (ex.: Document Name, Paper Size). */
-  const aliases = {
-    time: ['time'],
-    user: ['user'],
-    pages: ['pages'],
-    copies: ['copies'],
-    printer: ['printer'],
-    document: ['document', 'documentname'],
-    client: ['client'],
-    paper: ['paper', 'papersize'],
-    language: ['language'],
-    height: ['height'],
-    width: ['width'],
-    duplex: ['duplex'],
-    grayscale: ['grayscale'],
-    size: ['size'],
-  };
-  for (let i = 0; i < headers.length; i += 1) {
-    const n = normalizeHeader(headers[i]);
-    for (const [canon, keys] of Object.entries(aliases)) {
-      if (keys.some((k) => n === k)) {
-        map[i] = canon;
-        break;
-      }
-    }
-  }
-  return map;
-}
-
-export function validarCabecalhoCsv(headers) {
-  const idxMap = mapHeaderToCanonical(headers);
-  const found = new Set(Object.values(idxMap));
-  const required = ['time', 'user', 'pages', 'copies', 'printer', 'document'];
-  const missing = required.filter((c) => !found.has(c));
-  return { ok: missing.length === 0, missing, idxMap, headers };
-}
-
-/** CSVs do Print Logger incluem 1+ linhas informativas antes da linha Time,User,Pages,… */
-function indiceLinhaCabecalho(records, maxScan = 30) {
-  for (let i = 0; i < Math.min(maxScan, records.length); i += 1) {
-    const row = records[i];
-    if (!Array.isArray(row) || !row.length) continue;
-    if (validarCabecalhoCsv(row).ok) return i;
-  }
-  return -1;
-}
-
-function linhaParaObjeto(record, idxMap) {
-  const o = {};
-  for (let i = 0; i < record.length; i += 1) {
-    const key = idxMap[i];
-    if (key) o[key] = record[i];
-  }
-  return o;
-}
-
-function parseBool(v) {
-  const s = String(v || '').toLowerCase().trim();
-  return s === 'true' || s === '1' || s === 'yes';
-}
-
-/** Valores típicos do export PaperCut: "DUPLEX" / "NOT DUPLEX", "GRAYSCALE" / "NOT GRAYSCALE". */
-function parsePapercutDuplex(v) {
-  const s = String(v || '').toLowerCase();
-  if (s.includes('not') && s.includes('duplex')) return false;
-  if (s.includes('duplex')) return true;
-  return parseBool(v);
-}
-
-function parsePapercutGrayscale(v) {
-  const s = String(v || '').toLowerCase();
-  if (s.includes('not') && s.includes('gray')) return false;
-  if (s.includes('gray')) return true;
-  return parseBool(v);
-}
-
-function parseIntSafe(v) {
-  const n = parseInt(String(v || '').replace(/\D/g, ''), 10);
-  return Number.isFinite(n) ? n : 0;
-}
-
-function parseDate(v) {
-  const d = new Date(String(v || '').trim());
-  return Number.isNaN(d.getTime()) ? null : d;
-}
-
-export function dedupHash(provinciaId, departamentoId, o) {
-  const raw = [
-    provinciaId,
-    departamentoId,
-    String(o.time || ''),
-    String(o.user || ''),
-    String(o.pages || ''),
-    String(o.copies || ''),
-    String(o.printer || ''),
-    String(o.document || ''),
-    String(o.size || ''),
-  ].join('|');
-  return createHash('sha256').update(raw).digest('hex');
-}
-
+/** Compatibilidade: importação apenas CSV (buffer). */
 export function parseCsvBuffer(buffer, provinciaId, departamentoId) {
-  const text = buffer.toString('utf8').replace(/^\uFEFF/, '');
-  const records = parse(text, {
-    skip_empty_lines: true,
-    relax_column_count: true,
-    trim: true,
-  });
+  const records = csvTextoParaRecords(buffer.toString('utf8'));
   if (!records.length) {
     const err = new Error('CSV vazio');
     err.status = 400;
     throw err;
   }
-  const headerIdx = indiceLinhaCabecalho(records);
-  if (headerIdx < 0) {
-    const err = new Error(
-      'Não foi encontrada uma linha de cabeçalho válida (Time, User, Pages, Copies, Printer, Document). ' +
-        'Confirme que é um CSV do PaperCut Print Logger ou que não falta a linha de cabeçalho.'
-    );
-    err.status = 400;
-    throw err;
-  }
-  const headers = records[headerIdx];
-  const { ok, missing, idxMap } = validarCabecalhoCsv(headers);
-  if (!ok) {
-    const err = new Error(`Colunas em falta no CSV: ${missing.join(', ')}`);
-    err.status = 400;
-    err.details = { missing };
-    throw err;
-  }
-
-  const linhas = [];
-  const erros = [];
-  for (let r = headerIdx + 1; r < records.length; r += 1) {
-    const row = records[r];
-    const o = linhaParaObjeto(row, idxMap);
-    try {
-      const imprimido_em = parseDate(o.time);
-      const paginas = Math.max(0, parseIntSafe(o.pages));
-      const copias = Math.max(1, parseIntSafe(o.copies) || 1);
-      const duplex = parsePapercutDuplex(o.duplex);
-      const grayscale = parsePapercutGrayscale(o.grayscale);
-      const hash = dedupHash(provinciaId, departamentoId, o);
-      linhas.push({
-        import_job_id: null,
-        provincia_id: provinciaId,
-        departamento_id: departamentoId,
-        dedup_hash: hash,
-        imprimido_em,
-        usuario_papercut: o.user ? String(o.user).slice(0, 255) : null,
-        paginas,
-        copias,
-        impressora: o.printer ? String(o.printer).slice(0, 255) : null,
-        documento: o.document ? String(o.document).slice(0, 512) : null,
-        cliente: o.client ? String(o.client).slice(0, 255) : null,
-        papel: o.paper ? String(o.paper).slice(0, 120) : null,
-        idioma: o.language ? String(o.language).slice(0, 64) : null,
-        altura_mm: parseIntSafe(o.height) || null,
-        largura_mm: parseIntSafe(o.width) || null,
-        duplex,
-        grayscale,
-        tamanho_bytes: parseIntSafe(o.size) || null,
-      });
-    } catch (e) {
-      erros.push({ linha: r + 1, erro: e.message });
-    }
-  }
-  return { linhas, erros, total: linhas.length };
+  return recordsParaLinhas(records, provinciaId, departamentoId, { origem: 'CSV' });
 }
 
 export async function processarImportacaoFicheiros({
@@ -202,7 +41,7 @@ export async function processarImportacaoFicheiros({
   provinciaId,
   departamentoId,
   nomeLote,
-  buffers,
+  ficheiros,
 }) {
   const job = await papercutRepository.createJob({
     usuario_id: usuarioId,
@@ -220,13 +59,20 @@ export async function processarImportacaoFicheiros({
   let errosAcumulados = 0;
   const logs = [];
   try {
-    for (let i = 0; i < buffers.length; i += 1) {
-      const { linhas, erros } = parseCsvBuffer(buffers[i], provinciaId, departamentoId);
+    for (let i = 0; i < ficheiros.length; i += 1) {
+      const f = ficheiros[i];
+      const { linhas, erros, formato, nome } = await parsePapercutFicheiro(
+        f,
+        provinciaId,
+        departamentoId
+      );
       allLinhas = allLinhas.concat(
         linhas.map((L) => ({ ...L, import_job_id: job.id }))
       );
       errosAcumulados += erros.length;
-      logs.push(`Ficheiro ${i + 1}: ${linhas.length} linhas válidas, ${erros.length} erros de linha`);
+      logs.push(
+        `${nome || `Ficheiro ${i + 1}`} (${formato}): ${linhas.length} linhas válidas, ${erros.length} erros de linha`
+      );
     }
 
     await papercutRepository.updateJob(job.id, {
@@ -304,19 +150,10 @@ export async function relatorioMensalPapercut({ ano, mes, provinciaId, departame
   const ultimoDia = new Date(Date.UTC(ano, mes, 0)).getUTCDate();
   const ateStr = `${ano}-${pad(mes)}-${pad(ultimoDia)}`;
 
-  const precosRef = await obterPrecosReferencia({
-    provinciaId,
-    de: deStr,
-    ate: ateStr,
-  });
-
-  const custosTotais = calcularCustosImpressao({
-    folhas,
-    folhas_gray,
-    folhas_cor,
-    folhas_duplex,
-    precos: precosRef,
-  });
+  const [precosRef, gastoMes] = await Promise.all([
+    obterPrecosReaisConsumiveis({ provinciaId, de: deStr, ate: ateStr }),
+    obterGastoRealConsumiveis({ provinciaId, de: deStr, ate: ateStr }),
+  ]);
   const unidadesPapel = folhasParaUnidadesA4(folhas);
 
   const topUsers = await papercutRepository.topUsuarios(where, 15);
@@ -347,7 +184,7 @@ export async function relatorioMensalPapercut({ ano, mes, provinciaId, departame
   );
 
   const porProvinciaRaw = await models.sequelize.query(
-    `SELECT p.nome AS provincia,
+    `SELECT p.id AS provincia_id, p.nome AS provincia,
         SUM(l.paginas * l.copias) AS folhas,
         SUM(CASE WHEN l.grayscale = 1 THEN l.paginas * l.copias ELSE 0 END) AS folhas_gray,
         SUM(CASE WHEN l.grayscale = 0 THEN l.paginas * l.copias ELSE 0 END) AS folhas_cor,
@@ -360,11 +197,17 @@ export async function relatorioMensalPapercut({ ano, mes, provinciaId, departame
     { replacements: deptReplacements, type: models.sequelize.QueryTypes.SELECT }
   );
 
-  const porDepartamento = porDepartamentoRaw.map((r) => enriquecerComCustos(r, precosRef));
-  const porProvincia = porProvinciaRaw.map((r) => enriquecerComCustos(r, precosRef));
-  const topUsersComCusto = topUsers.map((u) =>
-    enriquecerComCustos({ usuario_papercut: u.usuario_papercut, folhas: u.folhas }, precosRef)
-  );
+  const porDepartamento = porDepartamentoRaw.map((r) => enriquecerVolumesImpressao(r));
+  let porProvincia;
+  if (provinciaId) {
+    porProvincia = porProvinciaRaw.map((r) => enriquecerProvinciaComAquisicoes(r, gastoMes));
+  } else {
+    porProvincia = await enriquecerProvinciasComAquisicoes(porProvinciaRaw, { de: deStr, ate: ateStr });
+  }
+  const topUsersComCusto = topUsers.map((u) => ({
+    usuario_papercut: u.usuario_papercut,
+    folhas: num(u.folhas),
+  }));
 
   let consumiveis_aquisicao_no_mes = [];
   let resumo_consumiveis_mes = { num_registos: 0, total_mzn: 0 };
@@ -417,14 +260,12 @@ export async function relatorioMensalPapercut({ ano, mes, provinciaId, departame
   }
 
   const periodo = { ano, mes };
-  const detalheUtilizadores = await obterUtilizadoresDetalheParaRelatorio(where, periodo, precosRef);
+  const detalheUtilizadores = await obterUtilizadoresDetalheParaRelatorio(where, periodo);
   const utilizadores = detalheUtilizadores.utilizadores;
   const resumo_utilizadores_mes = detalheUtilizadores.resumo_utilizadores;
 
-  const evolucao = await evolucaoCustosMensais({ meses: 6, provinciaId });
-  const mesAtual = evolucao.meses.find((m) => m.ano === ano && m.mes === mes);
-  const idxAtual = evolucao.meses.findIndex((m) => m.ano === ano && m.mes === mes);
-  const mesAnterior = idxAtual > 0 ? evolucao.meses[idxAtual - 1] : null;
+  const totalReal =
+    resumo_consumiveis_mes.total_mzn > 0 ? resumo_consumiveis_mes.total_mzn : null;
 
   return {
     periodo,
@@ -441,29 +282,17 @@ export async function relatorioMensalPapercut({ ano, mes, provinciaId, departame
       folhas_cor_ou_nao_gray: folhas_cor,
     },
     financeiro: {
-      gasto_papel_mzn: custosTotais.gasto_papel_mzn,
-      gasto_toner_mzn: custosTotais.gasto_toner_mzn,
-      custo_total_mzn: custosTotais.custo_total_mzn,
-      gasto_aquisicoes_consumiveis_mes: resumo_consumiveis_mes.total_mzn,
-      media_custo_mensal_mzn: evolucao.media_custo_mensal_mzn,
-      tendencia_custo_mensal_pct: mesAnterior
-        ? tendenciaPercentual(mesAtual?.custo_total_mzn, mesAnterior.custo_total_mzn)
-        : null,
-      preco_por_folha_mzn: precosRef.preco_por_folha_mzn,
+      custo_mes_real_mzn: totalReal,
+      gasto_aquisicoes_consumiveis_mes: totalReal,
+      gasto_papel_aquisicoes_mzn: gastoMes.gasto_papel_aquisicoes_mzn,
+      gasto_toner_aquisicoes_mzn: gastoMes.gasto_toner_aquisicoes_mzn,
       preco_por_caixa_mzn: precosRef.preco_por_caixa_mzn,
-      fonte_precos: precosRef.fonte,
+      preco_por_unidade_toner_mzn: precosRef.preco_por_unidade_toner_mzn,
     },
-    estimativas: {
-      resmas_a4: unidadesPapel.resmas,
-      caixas_a4: unidadesPapel.caixas,
-      toner_relativo: custosTotais.toner_estimado,
-      gasto_papel_mzn: custosTotais.gasto_papel_mzn,
-      gasto_toner_estimado_mzn: custosTotais.gasto_toner_mzn,
-      custo_total_estimado_mzn: custosTotais.custo_total_mzn,
-    },
-    evolucao_custos_mensais: evolucao.meses,
-    comparativo_departamentos: [...porDepartamento].sort((a, b) => b.custo_total_mzn - a.custo_total_mzn),
-    comparativo_provincias: [...porProvincia].sort((a, b) => b.custo_total_mzn - a.custo_total_mzn),
+    comparativo_departamentos: [...porDepartamento].sort((a, b) => b.folhas - a.folhas),
+    comparativo_provincias: [...porProvincia].sort(
+      (a, b) => (b.aquisicoes_mes_mzn ?? 0) - (a.aquisicoes_mes_mzn ?? 0)
+    ),
     top_usuarios: topUsersComCusto,
     top_impressoras: topPrinters,
     por_departamento: porDepartamento,
