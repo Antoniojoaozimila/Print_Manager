@@ -264,6 +264,10 @@ const papercutDemoExportQuery = Joi.object({
   formato: Joi.string().valid('pdf', 'xlsx', 'excel', 'docx', 'word').default('pdf'),
 });
 
+const papercutApagarUtilizadorBody = Joi.object({
+  usuario: Joi.string().trim().min(1).max(255).required(),
+});
+
 export default {
   login,
   usuarioCreate,
@@ -291,6 +295,7 @@ export default {
   papercutImportMeta,
   papercutRelatorioQuery,
   papercutDemoExportQuery,
+  papercutApagarUtilizadorBody,
   papercutUsuarioRelatorioQuery,
   papercutUsuarioRelatorioExportQuery,
 };

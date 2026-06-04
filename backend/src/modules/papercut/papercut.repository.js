@@ -105,6 +105,40 @@ export const papercutRepository = {
     });
   },
 
+  async listUtilizadoresComContagem() {
+    const rows = await models.PapercutLinha.findAll({
+      attributes: [
+        'usuario_papercut',
+        [models.sequelize.fn('COUNT', models.sequelize.col('id')), 'total_linhas'],
+        [models.sequelize.fn('SUM', models.sequelize.literal('paginas * copias')), 'total_folhas'],
+        [models.sequelize.fn('MIN', models.sequelize.col('imprimido_em')), 'primeira_impressao'],
+        [models.sequelize.fn('MAX', models.sequelize.col('imprimido_em')), 'ultima_impressao'],
+      ],
+      where: {
+        [Op.and]: [
+          { usuario_papercut: { [Op.ne]: null } },
+          { usuario_papercut: { [Op.ne]: '' } },
+        ],
+      },
+      group: ['usuario_papercut'],
+      order: [['usuario_papercut', 'ASC']],
+      raw: true,
+    });
+    return rows;
+  },
+
+  async countLinhasByUsuario(usuario) {
+    return models.PapercutLinha.count({
+      where: { usuario_papercut: usuario },
+    });
+  },
+
+  async deleteLinhasByUsuario(usuario) {
+    return models.PapercutLinha.destroy({
+      where: { usuario_papercut: usuario },
+    });
+  },
+
   async topImpressoras(whereClause, limit = 10) {
     return models.PapercutLinha.findAll({
       attributes: [

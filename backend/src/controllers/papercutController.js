@@ -6,6 +6,10 @@ import {
   relatorioMensalPapercut,
   analisesPapercut,
 } from '../modules/papercut/papercutImport.service.js';
+import {
+  listarUtilizadoresPapercut,
+  apagarRegistosUtilizadorPapercut,
+} from '../modules/papercut/papercutUtilizadores.service.js';
 import { validarFicheiroUpload } from '../modules/papercut/papercutFileParser.js';
 import { exportarRelatorioMensal } from '../services/gestaoExport.service.js';
 import { obterDadosRelatorioDemo } from '../services/papercutRelatorioDemo.js';
@@ -167,6 +171,24 @@ async function analises(req, res, next) {
   }
 }
 
+async function listarUtilizadores(req, res, next) {
+  try {
+    const data = await listarUtilizadoresPapercut();
+    res.json({ success: true, data, meta: { total: data.length } });
+  } catch (e) {
+    next(e);
+  }
+}
+
+async function apagarRegistosUtilizador(req, res, next) {
+  try {
+    const data = await apagarRegistosUtilizadorPapercut(req.body.usuario);
+    res.json({ success: true, data });
+  } catch (e) {
+    next(e);
+  }
+}
+
 async function exportRelatorio(req, res, next) {
   try {
     const formato = (req.query.formato || 'pdf').toLowerCase();
@@ -191,6 +213,8 @@ export {
   importar,
   listImports,
   getImport,
+  listarUtilizadores,
+  apagarRegistosUtilizador,
   relatorioMensal,
   relatorioDemo,
   analises,

@@ -12,6 +12,11 @@ export default function PapercutGestaoPage() {
   const [imports, setImports] = useState([]);
   const [ano, setAno] = useState(new Date().getFullYear());
   const [mes, setMes] = useState(new Date().getMonth() + 1);
+  const [utilizadores, setUtilizadores] = useState([]);
+  const [filtroUtilizador, setFiltroUtilizador] = useState('');
+  const [utilizadorApagar, setUtilizadorApagar] = useState('');
+  const [aCarregarUtilizadores, setACarregarUtilizadores] = useState(false);
+  const [aApagar, setAApagar] = useState(false);
 
   function nomeFicheiroDoContentDisposition(headers, fallback) {
     const cd = headers?.['content-disposition'] || headers?.['Content-Disposition'];
@@ -27,10 +32,61 @@ export default function PapercutGestaoPage() {
     return fallback;
   }
 
+  async function carregarUtilizadores() {
+    setACarregarUtilizadores(true);
+    try {
+      const { data } = await api.get('/papercut/utilizadores');
+      setUtilizadores(data.data || []);
+    } catch (e) {
+      setMsg(e.response?.data?.error || 'Erro ao carregar utilizadores');
+    } finally {
+      setACarregarUtilizadores(false);
+    }
+  }
+
   useEffect(() => {
     api.get('/papercut/catalogos').then(({ data }) => setCatalogos(data.data));
     api.get('/papercut/importacoes', { params: { limit: 20 } }).then(({ data }) => setImports(data.data));
+    carregarUtilizadores();
   }, []);
+
+  const utilizadoresFiltrados = utilizadores.filter((u) => {
+    const q = filtroUtilizador.trim().toLowerCase();
+    if (!q) return true;
+    return String(u.usuario || '').toLowerCase().includes(q);
+  });
+
+  const utilizadorSeleccionado = utilizadores.find((u) => u.usuario === utilizadorApagar);
+
+  async function apagarRegistosUtilizador() {
+    if (!utilizadorApagar) {
+      setMsg('Seleccione o utilizador cujos registos pretende apagar.');
+      return;
+    }
+    const u = utilizadorSeleccionado;
+    const linhas = u?.total_linhas ?? 0;
+    const ok = window.confirm(
+      `Apagar TODOS os ${linhas.toLocaleString('pt-MZ')} registos de impressão do utilizador "${utilizadorApagar}"?\n\nEsta acção é irreversível.`
+    );
+    if (!ok) return;
+
+    setAApagar(true);
+    setMsg('');
+    try {
+      const { data } = await api.post('/papercut/utilizadores/apagar-registos', {
+        usuario: utilizadorApagar,
+      });
+      setMsg(
+        `Removidos ${data.data.linhas_removidas.toLocaleString('pt-MZ')} registos do utilizador "${data.data.usuario}".`
+      );
+      setUtilizadorApagar('');
+      await carregarUtilizadores();
+    } catch (e) {
+      setMsg(e.response?.data?.error || 'Erro ao apagar registos');
+    } finally {
+      setAApagar(false);
+    }
+  }
 
   async function enviarImport() {
     setMsg('');
@@ -121,7 +177,7 @@ export default function PapercutGestaoPage() {
   }
 
   return (
-    <div className="page-content max-w-3xl">
+    <div className="page-content max-w-5xl">
       <PageHeader
         badge="PaperCut"
         title="Importação e relatórios"
@@ -219,6 +275,101 @@ export default function PapercutGestaoPage() {
               Demo {fmt.toUpperCase()}
             </button>
           ))}
+        </div>
+      </section>
+
+      <section className="app-card space-y-3">
+        <h2 className="text-white font-medium text-sm hud-section-title">Apagar registos por utilizador</h2>
+        <p className="text-xs text-slate-500">
+          Lista todos os utilizadores com dados importados no PaperCut. Pode remover todos os registos de um
+          utilizador (útil para corrigir duplicados ou importações erradas). Não afecta utilizadores de login do
+          sistema.
+        </p>
+        <div className="flex flex-wrap gap-2 items-center">
+          <input
+            type="search"
+            className="input-imperial flex-1 min-w-[12rem] py-1.5"
+            placeholder="Filtrar por nome…"
+            value={filtroUtilizador}
+            onChange={(e) => setFiltroUtilizador(e.target.value)}
+          />
+          <button
+            type="button"
+            className="btn-imperial-outline text-sm py-1.5 px-3"
+            onClick={carregarUtilizadores}
+            disabled={aCarregarUtilizadores}
+          >
+            {aCarregarUtilizadores ? 'A actualizar…' : 'Actualizar lista'}
+          </button>
+        </div>
+        {utilizadores.length > 0 ? (
+          <div className="overflow-x-auto rounded border border-surface-border max-h-56 overflow-y-auto">
+            <table className="w-full text-xs text-left">
+              <thead className="sticky top-0 bg-surface-elevated text-slate-400">
+                <tr>
+                  <th className="px-2 py-2 font-medium">Utilizador</th>
+                  <th className="px-2 py-2 font-medium text-right">Registos</th>
+                  <th className="px-2 py-2 font-medium text-right">Folhas</th>
+                </tr>
+              </thead>
+              <tbody className="text-slate-300 divide-y divide-surface-border">
+                {utilizadoresFiltrados.map((u) => (
+                  <tr
+                    key={u.usuario}
+                    className={
+                      utilizadorApagar === u.usuario ? 'bg-imperial-500/10' : 'hover:bg-white/5'
+                    }
+                  >
+                    <td className="px-2 py-1.5">
+                      <button
+                        type="button"
+                        className="text-left hover:text-white underline-offset-2 hover:underline"
+                        onClick={() => setUtilizadorApagar(u.usuario)}
+                      >
+                        {u.usuario}
+                      </button>
+                    </td>
+                    <td className="px-2 py-1.5 text-right tabular-nums">{u.total_linhas.toLocaleString('pt-MZ')}</td>
+                    <td className="px-2 py-1.5 text-right tabular-nums">
+                      {Math.round(u.total_folhas).toLocaleString('pt-MZ')}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="text-xs text-slate-500">
+            {aCarregarUtilizadores ? 'A carregar…' : 'Nenhum utilizador PaperCut na base de dados.'}
+          </p>
+        )}
+        {utilizadoresFiltrados.length === 0 && utilizadores.length > 0 && (
+          <p className="text-xs text-slate-500">Nenhum utilizador corresponde ao filtro.</p>
+        )}
+        <div className="flex flex-wrap gap-2 items-end">
+          <label className="flex flex-col gap-1 text-xs text-slate-500 flex-1 min-w-[14rem]">
+            Utilizador a apagar
+            <select
+              className="select-imperial"
+              value={utilizadorApagar}
+              onChange={(e) => setUtilizadorApagar(e.target.value)}
+            >
+              <option value="">— Seleccionar —</option>
+              {utilizadores.map((u) => (
+                <option key={u.usuario} value={u.usuario}>
+                  {u.usuario} ({u.total_linhas} registos)
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            type="button"
+            className="btn-imperial-outline text-sm py-1.5 px-3 border-red-800/60 text-red-300 hover:bg-red-950/40"
+            onClick={apagarRegistosUtilizador}
+            disabled={!utilizadorApagar || aApagar}
+          >
+            {aApagar ? 'A apagar…' : 'Apagar todos os registos'}
+          </button>
         </div>
       </section>
 

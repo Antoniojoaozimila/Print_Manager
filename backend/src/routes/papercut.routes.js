@@ -13,6 +13,8 @@ import {
   analises,
   exportRelatorio,
   exportRelatorioDemo,
+  listarUtilizadores,
+  apagarRegistosUtilizador,
 } from '../controllers/papercutController.js';
 
 const router = express.Router();
@@ -28,6 +30,14 @@ router.post(
 );
 router.get('/importacoes', authJwt, requireAdmin, listImports);
 router.get('/importacoes/:id', authJwt, requireAdmin, getImport);
+router.get('/utilizadores', authJwt, requireAdmin, listarUtilizadores);
+router.post(
+  '/utilizadores/apagar-registos',
+  authJwt,
+  requireAdmin,
+  validate(schemas.papercutApagarUtilizadorBody),
+  apagarRegistosUtilizador
+);
 router.get('/relatorios/demo', authJwt, requireAdmin, relatorioDemo);
 router.get(
   '/relatorios/demo/export',
