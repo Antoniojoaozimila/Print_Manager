@@ -10,6 +10,7 @@ import logRoutes from './log.routes.js';
 import backupRoutes from './backup.routes.js';
 import consumiveisRoutes from './consumiveis.routes.js';
 import papercutRoutes from './papercut.routes.js';
+import ticketsRoutes from './tickets.routes.js';
 
 const router = express.Router();
 
@@ -24,6 +25,7 @@ router.use('/logs', logRoutes);
 router.use('/backup', backupRoutes);
 router.use('/consumiveis', consumiveisRoutes);
 router.use('/papercut', papercutRoutes);
+router.use('/tickets', ticketsRoutes);
 
 router.get('/health', (req, res) => {
   res.json({ ok: true, service: 'print-manager-api' });

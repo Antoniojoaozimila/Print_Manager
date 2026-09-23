@@ -12,6 +12,8 @@ import ConsumivelTipoModel from './ConsumivelTipo.js';
 import ConsumivelAnexoModel from './ConsumivelAnexo.js';
 import PapercutImportJobModel from './PapercutImportJob.js';
 import PapercutLinhaModel from './PapercutLinha.js';
+import TicketAssistenciaModel from './TicketAssistencia.js';
+import TicketProjectoModel from './TicketProjecto.js';
 
 if (!process.env.DATABASE_URL) {
   throw new Error(
@@ -42,6 +44,8 @@ const ConsumivelTipo = ConsumivelTipoModel(sequelize);
 const ConsumivelAnexo = ConsumivelAnexoModel(sequelize);
 const PapercutImportJob = PapercutImportJobModel(sequelize);
 const PapercutLinha = PapercutLinhaModel(sequelize);
+const TicketAssistencia = TicketAssistenciaModel(sequelize);
+const TicketProjecto = TicketProjectoModel(sequelize);
 
 Usuario.hasMany(JobImpressao, { foreignKey: 'usuario_id', as: 'jobs' });
 JobImpressao.belongsTo(Usuario, { foreignKey: 'usuario_id', as: 'usuario' });
@@ -79,6 +83,11 @@ PapercutLinha.belongsTo(PapercutImportJob, { foreignKey: 'import_job_id', as: 'i
 PapercutLinha.belongsTo(Provincia, { foreignKey: 'provincia_id', as: 'provincia' });
 PapercutLinha.belongsTo(DepartamentoGestao, { foreignKey: 'departamento_id', as: 'departamento' });
 
+Usuario.hasMany(TicketAssistencia, { foreignKey: 'usuario_id', as: 'tickets_assistencias' });
+TicketAssistencia.belongsTo(Usuario, { foreignKey: 'usuario_id', as: 'usuario' });
+Usuario.hasMany(TicketProjecto, { foreignKey: 'usuario_id', as: 'tickets_projectos' });
+TicketProjecto.belongsTo(Usuario, { foreignKey: 'usuario_id', as: 'usuario' });
+
 const models = {
   sequelize,
   Sequelize,
@@ -94,6 +103,8 @@ const models = {
   ConsumivelAnexo,
   PapercutImportJob,
   PapercutLinha,
+  TicketAssistencia,
+  TicketProjecto,
 };
 
 export default models;

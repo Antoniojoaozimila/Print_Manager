@@ -59,7 +59,7 @@ export default function LoginPage() {
       setAuth(data.data.token, data.data.user);
       setScanState('success');
       await new Promise((r) => setTimeout(r, 1400));
-      navigate('/gestao');
+      navigate('/');
     } catch (e) {
       setError(e.response?.data?.error || 'Falha no login');
       setScanState('error');

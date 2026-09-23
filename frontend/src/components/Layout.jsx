@@ -5,19 +5,46 @@ import ImperialIcon, { IconBox } from './icons/ImperialIcons';
 
 const navClass = ({ isActive }) => (isActive ? 'nav-link-imperial-active' : 'nav-link-imperial');
 
-const NAV_ITEMS = [
-  { to: '/gestao', end: true, label: 'Painel gestão', icon: 'dashboard' },
-  { to: '/gestao/consumiveis', label: 'Consumíveis', icon: 'package' },
-  { to: '/gestao/papercut', label: 'PaperCut', icon: 'clipboard' },
-  { to: '/usuarios', label: 'Utilizadores', icon: 'user' },
-  { to: '/impressoras', label: 'Impressoras', icon: 'printer' },
-  { to: '/coletor', label: 'Coletor', icon: 'antenna' },
+const NAV_SECTIONS = [
+  {
+    title: 'Módulos',
+    items: [{ to: '/', end: true, label: 'Início', icon: 'dashboard' }],
+  },
+  {
+    title: 'Relatórios de impressões',
+    items: [
+      { to: '/gestao', end: true, label: 'Painel gestão', icon: 'chart' },
+      { to: '/gestao/consumiveis', label: 'Consumíveis', icon: 'package' },
+      { to: '/gestao/papercut', label: 'PaperCut', icon: 'clipboard' },
+    ],
+  },
+  {
+    title: 'Assistências técnicas TI',
+    items: [
+      { to: '/tickets', end: true, label: 'Painel TI', icon: 'ticket' },
+      { to: '/tickets/assistencias', label: 'Assistência diária', icon: 'user' },
+      { to: '/tickets/projectos', label: 'Projectos e tarefas', icon: 'document' },
+    ],
+  },
+  {
+    title: 'Administração',
+    adminOnly: true,
+    items: [
+      { to: '/usuarios', label: 'Utilizadores', icon: 'user' },
+      { to: '/impressoras', label: 'Impressoras', icon: 'printer' },
+      { to: '/coletor', label: 'Coletor', icon: 'antenna' },
+    ],
+  },
 ];
 
 const PAGE_TITLES = {
+  '/': 'Módulos',
   '/gestao': 'Painel executivo',
   '/gestao/consumiveis': 'Consumíveis',
   '/gestao/papercut': 'PaperCut',
+  '/tickets': 'Painel TI',
+  '/tickets/assistencias': 'Assistência diária',
+  '/tickets/projectos': 'Projectos e tarefas',
   '/usuarios': 'Utilizadores',
   '/impressoras': 'Impressoras',
   '/coletor': 'Coletor',
@@ -39,6 +66,7 @@ export default function Layout() {
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const pageTitle = PAGE_TITLES[location.pathname] || 'Gestão';
+  const isAdmin = user?.role === 'admin';
 
   function handleLogout() {
     logout();
@@ -68,7 +96,7 @@ export default function Layout() {
         }`}
       >
         <div className="p-4 border-b border-white/5">
-          <Link to="/gestao" className="flex items-center gap-3 group" onClick={closeSidebar}>
+          <Link to="/" className="flex items-center gap-3 group" onClick={closeSidebar}>
             <span className="flex h-10 w-10 items-center justify-center rounded-full bg-imperial-500 text-sm font-bold text-white shrink-0">
               {userInitials(user?.nome)}
             </span>
@@ -79,13 +107,21 @@ export default function Layout() {
           </Link>
         </div>
 
-        <nav className="flex-1 overflow-y-auto p-3 space-y-1">
-          <p className="px-3 py-2 text-[10px] uppercase tracking-widest text-slate-500 font-semibold">Menu</p>
-          {NAV_ITEMS.map((item) => (
-            <NavLink key={item.to} to={item.to} end={item.end} className={navClass} onClick={closeSidebar}>
-              <IconBox name={item.icon} size="sm" />
-              {item.label}
-            </NavLink>
+        <nav className="flex-1 overflow-y-auto p-3 space-y-4">
+          {NAV_SECTIONS.filter((s) => !s.adminOnly || isAdmin).map((section) => (
+            <div key={section.title}>
+              <p className="px-3 py-2 text-[10px] uppercase tracking-widest text-slate-500 font-semibold">
+                {section.title}
+              </p>
+              <div className="space-y-1">
+                {section.items.map((item) => (
+                  <NavLink key={item.to} to={item.to} end={item.end} className={navClass} onClick={closeSidebar}>
+                    <IconBox name={item.icon} size="sm" />
+                    {item.label}
+                  </NavLink>
+                ))}
+              </div>
+            </div>
           ))}
         </nav>
 

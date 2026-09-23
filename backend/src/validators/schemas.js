@@ -268,6 +268,72 @@ const papercutApagarUtilizadorBody = Joi.object({
   usuario: Joi.string().trim().min(1).max(255).required(),
 });
 
+const dataIso = Joi.string()
+  .pattern(/^\d{4}-\d{2}-\d{2}$/)
+  .allow('', null);
+const horaHm = Joi.string()
+  .pattern(/^\d{1,2}:\d{2}(:\d{2})?$/)
+  .allow('', null);
+const estadoTicket = Joi.string().valid('Pendente', 'Em Progresso', 'Concluído', 'Cancelado');
+
+const ticketPeriodoQuery = Joi.object({
+  data: dataIso,
+  de: dataIso,
+  ate: dataIso,
+});
+
+const ticketListQuery = Joi.object({
+  data: dataIso,
+  de: dataIso,
+  ate: dataIso,
+  tecnico: Joi.string().max(120).allow('', null),
+  responsavel: Joi.string().max(120).allow('', null),
+  estado: estadoTicket.allow('', null),
+  search: Joi.string().max(200).allow('', null),
+  page: Joi.number().integer().min(1).default(1),
+  limit: Joi.number().integer().min(1).max(200).default(50),
+});
+
+const ticketAssistenciaCreate = Joi.object({
+  data: dataIso,
+  tecnico: Joi.string().max(120).allow('', null),
+  hora_inicio: horaHm,
+  hora_fim: horaHm,
+  departamento: Joi.string().max(120).allow('', null),
+  provincia: Joi.string().max(120).allow('', null),
+  colaborador_assistido: Joi.string().max(200).allow('', null),
+  tipo_solicitacao: Joi.string().max(120).required(),
+  problema: Joi.string().min(3).required(),
+  resolucao: Joi.string().allow('', null),
+  estado: estadoTicket,
+  urgencia: Joi.alternatives().try(Joi.boolean(), Joi.number().valid(0, 1), Joi.string().valid('Sim', 'Não', 'sim', 'nao', 'true', 'false')),
+  descricao_urgencia: Joi.string().allow('', null),
+  num_chamadas: Joi.number().integer().min(1).max(99),
+  meio_solicitacao: Joi.string().max(80).allow('', null),
+  observacoes: Joi.string().allow('', null),
+});
+
+const ticketAssistenciaUpdate = ticketAssistenciaCreate.fork(['tipo_solicitacao', 'problema'], (s) => s.optional()).min(1);
+
+const ticketProjectoCreate = Joi.object({
+  data: dataIso,
+  responsavel: Joi.string().max(120).allow('', null),
+  projecto_sistema: Joi.string().max(255).required(),
+  tarefa: Joi.string().min(3).required(),
+  data_atribuicao: dataIso,
+  prazo: dataIso,
+  fase_actual: Joi.string().max(80).allow('', null),
+  percentagem_conclusao: Joi.number().integer().min(0).max(100),
+  alteracoes_solicitadas: Joi.string().allow('', null),
+  data_alteracao: dataIso,
+  descricao_alteracao: Joi.string().allow('', null),
+  accao_realizada: Joi.string().allow('', null),
+  estado: estadoTicket,
+  observacoes: Joi.string().allow('', null),
+});
+
+const ticketProjectoUpdate = ticketProjectoCreate.fork(['projecto_sistema', 'tarefa'], (s) => s.optional()).min(1);
+
 export default {
   login,
   usuarioCreate,
@@ -298,4 +364,10 @@ export default {
   papercutApagarUtilizadorBody,
   papercutUsuarioRelatorioQuery,
   papercutUsuarioRelatorioExportQuery,
+  ticketPeriodoQuery,
+  ticketListQuery,
+  ticketAssistenciaCreate,
+  ticketAssistenciaUpdate,
+  ticketProjectoCreate,
+  ticketProjectoUpdate,
 };

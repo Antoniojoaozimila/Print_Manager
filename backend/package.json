@@ -14,7 +14,8 @@
     "db:migrate:undo": "sequelize-cli db:migrate:undo",
     "db:seed": "sequelize-cli db:seed:all",
     "admin:create": "node scripts/create-admin.js",
-    "gestao:apply": "node scripts/apply-modulo-consumiveis-papercut.js"
+    "gestao:apply": "node scripts/apply-modulo-consumiveis-papercut.js",
+    "tickets:apply": "node scripts/apply-modulo-tickets-ti.js"
   },
   "engines": {
     "node": ">=18"
